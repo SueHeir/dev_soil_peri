@@ -1,0 +1,52 @@
+# Bond-based peridynamic bar in uniaxial tension.
+#
+# A slender PMMA-like bar, gripped at both ends, pulled at constant velocity.
+#
+# Run: cargo run --release --example bb_bar_tension --no-default-features -- examples/bb_bar_tension/config.toml
+
+[comm]
+processors_x = 1
+processors_y = 1
+processors_z = 1
+
+[domain]
+# Box is slightly larger than the bar so every point sits strictly inside.
+x_low = -0.001
+x_high = 0.041
+y_low = -0.001
+y_high = 0.005
+z_low = -0.001
+z_high = 0.005
+boundary_x = "fixed"
+boundary_y = "fixed"
+boundary_z = "fixed"
+
+[neighbor]
+# Neighbour cutoff comes from each point's cutoff_radius (= horizon). The bin
+# size must be at least the horizon.
+skin_fraction = 1.1
+bin_size = 0.0016
+every = 1
+
+[pond]
+horizon = 0.0015          # δ = 3 · spacing
+
+[[pond.materials]]
+name = "pmma"
+youngs_mod = 3.0e9        # Young's modulus [Pa]
+density = 1190.0          # [kg/m³]
+critical_stretch = 0.05   # s₀ — bonds break past 5% stretch
+
+[[pond.lattice]]
+material = "pmma"
+min = [0.0, 0.0, 0.0]     # bar: 40 mm × 4 mm × 4 mm
+max = [0.04, 0.004, 0.004]
+spacing = 0.0005          # Δx = 0.5 mm  →  80 × 8 × 8 = 5120 points
+
+[output]
+dir = "examples/bb_bar_tension"
+
+[run]
+steps = 8000
+dt = 5.0e-8               # well below the PD stable limit (dx / c ≈ 3e-7 s)
+thermo = 1000

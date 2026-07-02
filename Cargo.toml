@@ -1,0 +1,42 @@
+[package]
+name = "pond-bin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "POND peridynamics simulation examples and binaries"
+publish = false
+
+[workspace]
+members = [
+  "crates/*",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/SueHeir/pond"
+
+[features]
+default = ["mpi_backend"]
+mpi_backend = ["pond_core/mpi_backend", "dep:libffi-sys"]
+
+[[example]]
+name = "bb_bar_tension"
+path = "examples/bb_bar_tension/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+[dependencies]
+pond_core = { path = "./crates/pond_core", default-features = false }
+serde = { version = "1", features = ["derive"] }
+# Force libffi-sys to use system libffi (via pkg-config) instead of building
+# from source. libffi-sys 2.3.0 has a broken aarch64 macOS assembler; Homebrew
+# libffi is set via PKG_CONFIG_PATH. Only pulled in with the `mpi_backend`
+# feature — run the examples with `--no-default-features` to skip it entirely.
+libffi-sys = { version = "2.3.0", features = ["system"], optional = true }

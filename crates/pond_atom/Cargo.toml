@@ -1,0 +1,21 @@
+[package]
+name = "pond_atom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Per-point peridynamics data (PdAtom), PD materials, and lattice point-cloud generation for POND"
+keywords = ["peridynamics", "atom", "material", "simulation"]
+categories = ["simulation", "science"]
+
+[dependencies]
+soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "master", default-features = false }
+grass_app = { git = "https://github.com/SueHeir/grass.git", rev = "ea21ea3629de990a717cc1421747901e5d64a66b" }
+grass_scheduler = { git = "https://github.com/SueHeir/grass.git", rev = "ea21ea3629de990a717cc1421747901e5d64a66b" }
+soil_derive = { git = "https://github.com/SueHeir/soil.git", branch = "master" }
+serde = { version = "1", features = ["derive"] }
+
+[features]
+default = []
+mpi_backend = ["soil_core/mpi_backend"]

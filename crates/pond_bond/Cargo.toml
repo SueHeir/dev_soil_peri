@@ -1,0 +1,21 @@
+[package]
+name = "pond_bond"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Bond-based peridynamics for POND: constant-micromodulus pairwise force, critical-stretch breakage, damage"
+keywords = ["peridynamics", "bond-based", "fracture", "simulation"]
+categories = ["simulation", "science"]
+
+[dependencies]
+soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "master", default-features = false }
+grass_app = { git = "https://github.com/SueHeir/grass.git", rev = "ea21ea3629de990a717cc1421747901e5d64a66b" }
+grass_scheduler = { git = "https://github.com/SueHeir/grass.git", rev = "ea21ea3629de990a717cc1421747901e5d64a66b" }
+pond_atom = { path = "../pond_atom", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+
+[features]
+default = []
+mpi_backend = ["soil_core/mpi_backend", "pond_atom/mpi_backend"]
