@@ -78,6 +78,20 @@ The `--no-default-features` flag runs single-process (no MPI), which is the
 supported configuration for the current bond-based slice — see each crate README
 for the MPI status of bond/family construction.
 
+## Examples
+
+| example | what it shows |
+|---|---|
+| [`bb_bar_tension`](examples/bb_bar_tension) | elastic bond-based bar in uniaxial tension (nonlocal stress wave, no failure) |
+| [`bb_plate_fracture`](examples/bb_plate_fracture) | **mode-I fracture of a pre-notched plate** — a crack nucleates at the notch tip and propagates straight along the symmetry plane by critical-stretch bond breakage (nothing prescribes the path). Validates the Griffith relation `s₀ = √(5G₀/9Kδ)` and an emergent propagation threshold. |
+
+```bash
+# mode-I pre-notched plate fracture (single-process)
+cargo run --release --example bb_plate_fracture --no-default-features -- examples/bb_plate_fracture/config.toml
+# end-to-end validation (build + run + checks + crack-path plot)
+python3 examples/bb_plate_fracture/verify.py
+```
+
 ## License
 
 MIT OR Apache-2.0

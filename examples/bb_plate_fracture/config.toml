@@ -1,0 +1,69 @@
+# Bond-based peridynamic mode-I fracture of a pre-notched plate.
+#
+# A rectangular soda-lime-glass plate carries a horizontal edge pre-notch at
+# mid-height. The plate is pre-stretched in y to a fixed far-field mode-I strain
+# and its top/bottom edges are then held (displacement control). The stress
+# concentrates at the notch tip; bonds there exceed the critical stretch and
+# break, and the crack PROPAGATES straight ahead along the symmetry plane — the
+# crack path is not prescribed anywhere, it emerges from the bond breakage. The
+# applied strain (main.rs `PRESTRAIN`) is kept below s0 so the bulk stays intact.
+#
+# The critical stretch is derived from the fracture energy G0 by the code via
+#   s0 = sqrt(5 G0 / (9 K delta))        (3-D constant-micromodulus model)
+# (set `fracture_energy` below, leave `critical_stretch` unset). The example
+# additionally verifies this Griffith relation against a direct discrete
+# bond-energy sum across the crack plane at startup (see main.rs / verify.py).
+#
+# Reference: Silling & Askari, Comput. Struct. 83 (2005) 1526 (3-D bond-based PD,
+# critical stretch, the s0<->G0 relation); Ha & Bobaru, Int. J. Fract. 162
+# (2010) 229 (mode-I notch -> straight crack, dynamic branching at higher load).
+#
+# Run (single-process):
+#   cargo run --release --example bb_plate_fracture --no-default-features -- examples/bb_plate_fracture/config.toml
+
+[comm]
+processors_x = 1
+processors_y = 1
+processors_z = 1
+
+[domain]
+# Box is slightly larger than the plate so every point sits strictly inside.
+x_low = -0.002
+x_high = 0.052
+y_low = -0.002
+y_high = 0.042
+z_low = -0.002
+z_high = 0.010
+boundary_x = "fixed"
+boundary_y = "fixed"
+boundary_z = "fixed"
+
+[neighbor]
+# Neighbour cutoff comes from each point's cutoff_radius (= horizon). The bin
+# size must be at least the horizon (delta = 3 mm).
+skin_fraction = 1.1
+bin_size = 0.0032
+every = 1
+
+[pond]
+horizon = 0.003           # delta = 3 * spacing
+
+[[pond.materials]]
+name = "glass"
+youngs_mod = 72.0e9       # Young's modulus E [Pa]  (soda-lime glass)
+density = 2440.0          # rho [kg/m3]
+fracture_energy = 135.0   # G0 [J/m2]  ->  s0 = sqrt(5 G0 / (9 K delta))
+
+[[pond.lattice]]
+material = "glass"
+min = [0.0, 0.0, 0.0]     # plate: 50 mm (x, crack dir) x 40 mm (y, load) x 8 mm (z)
+max = [0.05, 0.04, 0.008]
+spacing = 0.001           # dx = 1 mm  ->  50 x 40 x 8 = 16000 points
+
+[output]
+dir = "examples/bb_plate_fracture"
+
+[run]
+steps = 3000
+dt = 2.0e-8               # below the PD stable limit (dx / c_wave ~= 1.8e-7 s)
+thermo = 100

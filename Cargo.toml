@@ -26,6 +26,10 @@ mpi_backend = ["pond_core/mpi_backend", "dep:libffi-sys"]
 name = "bb_bar_tension"
 path = "examples/bb_bar_tension/main.rs"
 
+[[example]]
+name = "bb_plate_fracture"
+path = "examples/bb_plate_fracture/main.rs"
+
 [profile.release]
 opt-level = 3
 lto = "fat"
