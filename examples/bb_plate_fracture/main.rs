@@ -39,9 +39,9 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 
-use pond_core::prelude::*;
+use peri_core::prelude::*;
 
-// ── Geometry (must match `[[pond.lattice]]` in config.toml) ────────────────────
+// ── Geometry (must match `[[dev_soil_peri.lattice]]` in config.toml) ────────────────────
 /// Plate extent in x (crack-propagation direction) [m].
 const PLATE_X_MAX: f64 = 0.05;
 /// Plate extent in y (loading direction) [m].
@@ -81,20 +81,20 @@ fn main() {
     // pre-notch — both after the family is built.
     app.add_setup_system(
         griffith_energy_check
-            .after("pond_build_families")
-            .label("pond_griffith_check"),
+            .after("peri_build_families")
+            .label("peri_griffith_check"),
         ScheduleSetupSet::PostSetup,
     );
     app.add_setup_system(
         introduce_notch
-            .after("pond_griffith_check")
-            .label("pond_notch"),
+            .after("peri_griffith_check")
+            .label("peri_notch"),
         ScheduleSetupSet::PostSetup,
     );
     // Displacement-control loading: pre-stretch the plate in y after the notch
     // is carved and the reference bonds (r0) are recorded.
     app.add_setup_system(
-        apply_prestrain.after("pond_notch"),
+        apply_prestrain.after("peri_notch"),
         ScheduleSetupSet::PostSetup,
     );
 
@@ -138,14 +138,14 @@ fn set_timestep(mut atoms: ResMut<Atom>, run_config: Res<RunConfig>) {
 fn griffith_energy_check(
     atoms: Res<Atom>,
     registry: Res<AtomDataRegistry>,
-    table: Res<PdMaterialTable>,
+    table: Res<PeriMaterialTable>,
     comm: Res<CommResource>,
 ) {
     if comm.rank() != 0 {
         return;
     }
     let bond_store = registry.expect::<BondStore>("griffith_energy_check");
-    let pd = registry.expect::<PdAtom>("griffith_energy_check");
+    let pd = registry.expect::<PeriAtom>("griffith_energy_check");
     let nlocal = atoms.nlocal as usize;
 
     // tag → index for local points (partners of an interior patch are local).
@@ -216,7 +216,7 @@ fn introduce_notch(
     comm: Res<CommResource>,
 ) {
     let mut bond_store = registry.expect_mut::<BondStore>("introduce_notch");
-    let mut pd = registry.expect_mut::<PdAtom>("introduce_notch");
+    let mut pd = registry.expect_mut::<PeriAtom>("introduce_notch");
     let nlocal = atoms.nlocal as usize;
 
     let mut tag_to_index: HashMap<u32, usize> = HashMap::with_capacity(nlocal);
@@ -281,11 +281,11 @@ fn apply_prestrain(mut atoms: ResMut<Atom>, registry: Res<AtomDataRegistry>, com
     // The verifier brackets the Griffith threshold by running sub- and
     // super-critical loads; allow the strain to be overridden without editing
     // the (declarative) config. Defaults to `PRESTRAIN`.
-    let eps = std::env::var("POND_PRESTRAIN")
+    let eps = std::env::var("PERI_PRESTRAIN")
         .ok()
         .and_then(|s| s.parse::<f64>().ok())
         .unwrap_or(PRESTRAIN);
-    let pd = registry.expect::<PdAtom>("apply_prestrain");
+    let pd = registry.expect::<PeriAtom>("apply_prestrain");
     let nlocal = atoms.nlocal as usize;
     for i in 0..nlocal {
         let y0 = pd.ref_pos[i][1];
@@ -301,7 +301,7 @@ fn apply_prestrain(mut atoms: ResMut<Atom>, registry: Res<AtomDataRegistry>, com
 /// pre-stretched positions (zero velocity, zero force) so the imposed far-field
 /// stretch is maintained while the interior fractures freely.
 fn hold_grips(mut atoms: ResMut<Atom>, registry: Res<AtomDataRegistry>) {
-    let pd = registry.expect::<PdAtom>("hold_grips");
+    let pd = registry.expect::<PeriAtom>("hold_grips");
     let nlocal = atoms.nlocal as usize;
     for i in 0..nlocal {
         let y0 = pd.ref_pos[i][1];
@@ -335,7 +335,7 @@ fn report(
         return;
     }
 
-    let pd = registry.expect::<PdAtom>("report");
+    let pd = registry.expect::<PeriAtom>("report");
     let nlocal = atoms.nlocal as usize;
 
     let mut tip_x = 0.0f64;
@@ -375,7 +375,7 @@ fn report(
 
 /// Write the mid-thickness damage slice to a CSV for plotting. Snapshots go to
 /// `crack_field_<step>.csv`; the final field is also written to `crack_field.csv`.
-fn dump_crack_field(atoms: &Atom, pd: &PdAtom, step: usize, is_last: bool) {
+fn dump_crack_field(atoms: &Atom, pd: &PeriAtom, step: usize, is_last: bool) {
     let z_mid = 0.5 * PLATE_Z_MAX;
     let path = if is_last {
         "examples/bb_plate_fracture/crack_field.csv".to_string()

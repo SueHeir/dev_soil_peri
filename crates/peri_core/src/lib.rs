@@ -1,14 +1,14 @@
-//! # POND — Peridynamic Off-lattice Nonlocal Deformation
+//! # dev_soil_peri — Peridynamic Off-lattice Nonlocal Deformation
 //!
-//! POND is a plugin-based simulation framework for **peridynamics (PD)** built
-//! on the GRASS → SOIL stack. This umbrella crate re-exports every POND plugin
+//! dev_soil_peri is a plugin-based simulation framework for **peridynamics (PD)** built
+//! on the GRASS → SOIL stack. This umbrella crate re-exports every dev_soil_peri plugin
 //! crate and provides convenience plugin groups so a complete simulation reads
 //! in a few lines.
 //!
 //! # Quick start
 //!
 //! ```rust,ignore
-//! use pond_core::prelude::*;
+//! use peri_core::prelude::*;
 //!
 //! fn main() {
 //!     let mut app = App::new();
@@ -32,8 +32,8 @@
 //!
 //! | Crate | Description |
 //! |---|---|
-//! | [`pond_atom`] | per-point PD data (`PdAtom`), PD materials, lattice point-cloud generation |
-//! | [`pond_bond`] | bond-based PD: constant-micromodulus force, critical-stretch breakage, damage |
+//! | [`peri_atom`] | per-point PD data (`PeriAtom`), PD materials, lattice point-cloud generation |
+//! | [`peri_bond`] | bond-based PD: constant-micromodulus force, critical-stretch breakage, damage |
 //! | [`soil_core`] | substrate: atoms, domain decomposition, communication, neighbour lists, bonds |
 //! | [`soil_verlet`] | velocity-Verlet integration |
 //! | [`soil_print`] | thermo output, dump files, restart |
@@ -41,10 +41,10 @@
 // --- PD crates ---
 
 /// Per-point PD data, materials, and reference point-cloud generation.
-pub use pond_atom;
+pub use peri_atom;
 
 /// Bond-based peridynamics: nonlocal pairwise force, fracture, damage.
-pub use pond_bond;
+pub use peri_bond;
 
 // --- Infrastructure crates ---
 
@@ -93,33 +93,33 @@ impl PluginGroup for CorePlugins {
 /// Bond-based peridynamics plugin group.
 ///
 /// Includes, in registration order:
-/// - [`PdAtomPlugin`](pond_atom::PdAtomPlugin) — `PdAtom` data and `PdMaterialTable`
-/// - [`PdLatticePlugin`](pond_atom::PdLatticePlugin) — reference point cloud from `[[pond.lattice]]`
+/// - [`PeriAtomPlugin`](peri_atom::PeriAtomPlugin) — `PeriAtom` data and `PeriMaterialTable`
+/// - [`PeriLatticePlugin`](peri_atom::PeriLatticePlugin) — reference point cloud from `[[dev_soil_peri.lattice]]`
 /// - [`VelocityVerletPlugin`](soil_verlet::VelocityVerletPlugin) — translational integration
-/// - [`BondBasedPlugin`](pond_bond::BondBasedPlugin) — family construction + nonlocal bond force
+/// - [`BondBasedPlugin`](peri_bond::BondBasedPlugin) — family construction + nonlocal bond force
 pub struct BondBasedDefaultPlugins;
 
 impl PluginGroup for BondBasedDefaultPlugins {
     fn build(self) -> PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()
-            .add(pond_atom::PdAtomPlugin)
-            .add(pond_atom::PdLatticePlugin)
+            .add(peri_atom::PeriAtomPlugin)
+            .add(peri_atom::PeriLatticePlugin)
             .add(soil_verlet::VelocityVerletPlugin::new())
-            .add(pond_bond::BondBasedPlugin)
+            .add(peri_bond::BondBasedPlugin)
     }
 }
 
-/// The POND prelude — `use pond_core::prelude::*;` for everything a typical
+/// The dev_soil_peri prelude — `use peri_core::prelude::*;` for everything a typical
 /// simulation needs.
 pub mod prelude {
     // Plugin groups defined in this crate.
     pub use crate::{BondBasedDefaultPlugins, CorePlugins};
 
     // PD plugins and types.
-    pub use pond_atom::{
-        LatticeDef, PdAtom, PdAtomPlugin, PdLatticePlugin, PdMaterial, PdMaterialTable, PondConfig,
+    pub use peri_atom::{
+        LatticeDef, PeriAtom, PeriAtomPlugin, PeriLatticePlugin, PeriMaterial, PeriMaterialTable, PondConfig,
     };
-    pub use pond_bond::{bond_based_force, BondBasedPlugin, BOND_BROKEN, BOND_INTACT};
+    pub use peri_bond::{bond_based_force, BondBasedPlugin, BOND_BROKEN, BOND_INTACT};
 
     // Shared infrastructure.
     pub use soil_deform::{DeformConfig, DeformPlugin, DeformState};

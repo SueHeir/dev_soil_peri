@@ -28,16 +28,16 @@ skin_fraction = 1.1
 bin_size = 0.0016
 every = 1
 
-[pond]
+[dev_soil_peri]
 horizon = 0.0015          # δ = 3 · spacing
 
-[[pond.materials]]
+[[dev_soil_peri.materials]]
 name = "pmma"
 youngs_mod = 3.0e9        # Young's modulus [Pa]
 density = 1190.0          # [kg/m³]
 critical_stretch = 0.05   # s₀ — bonds break past 5% stretch
 
-[[pond.lattice]]
+[[dev_soil_peri.lattice]]
 material = "pmma"
 min = [0.0, 0.0, 0.0]     # bar: 40 mm × 4 mm × 4 mm
 max = [0.04, 0.004, 0.004]

@@ -1,36 +1,36 @@
-//! # pond_atom — Per-point peridynamics data, materials, and point clouds
+//! # peri_atom — Per-point peridynamics data, materials, and point clouds
 //!
 //! This crate provides the per-point data structures, material system, and
 //! reference-configuration point-cloud generation for peridynamics (PD)
-//! simulations in POND:
+//! simulations in dev_soil_peri:
 //!
-//! - **[`PdAtom`]** — Per-point extension data (reference position, point
+//! - **[`PeriAtom`]** — Per-point extension data (reference position, point
 //!   volume, scalar damage) registered as a SOIL [`AtomData`] column. The
 //!   point `volume` is `#[forward]` so ghost points carry it across MPI ranks
 //!   (a bond force on point `i` needs the *partner's* volume `Vⱼ`).
-//! - **[`PdMaterialTable`]** — Named PD materials. Each material stores the
+//! - **[`PeriMaterialTable`]** — Named PD materials. Each material stores the
 //!   bulk modulus `K`, the constant bond micromodulus `c = 18K/(πδ⁴)`, and the
 //!   critical bond stretch `s₀`. Bond-based PD fixes Poisson's ratio at ν = ¼,
 //!   so `K = 2E/3`.
-//! - **[`PdLatticePlugin`]** — Generates a regular point cloud from
-//!   `[[pond.lattice]]` config blocks: a uniform grid of points, each carrying
+//! - **[`PeriLatticePlugin`]** — Generates a regular point cloud from
+//!   `[[dev_soil_peri.lattice]]` config blocks: a uniform grid of points, each carrying
 //!   a cell volume `Δx³`, mass `ρΔx³`, and a neighbour cutoff equal to the
 //!   horizon δ so SOIL's neighbour machinery sees the whole family.
 //!
 //! ## TOML configuration
 //!
 //! ```toml
-//! [pond]
+//! [dev_soil_peri]
 //! horizon = 0.0015          # PD horizon δ [m] (typically ≈ 3·spacing)
 //!
-//! [[pond.materials]]
+//! [[dev_soil_peri.materials]]
 //! name = "pmma"
 //! youngs_mod = 3.0e9        # Young's modulus E [Pa]
 //! density = 1190.0          # [kg/m³]
 //! critical_stretch = 0.04   # s₀ (omit to derive from fracture_energy, or both to stay elastic)
 //! # fracture_energy = 50.0  # G₀ [J/m²]  → s₀ = sqrt(5 G₀ / (9 K δ))
 //!
-//! [[pond.lattice]]
+//! [[dev_soil_peri.lattice]]
 //! material = "pmma"
 //! min = [0.0, 0.0, 0.0]     # reference-box lower corner [m]
 //! max = [0.05, 0.01, 0.001] # reference-box upper corner [m]
@@ -52,22 +52,22 @@ pub const BOND_BASED_POISSON: f64 = 0.25;
 
 // ── Config structs ───────────────────────────────────────────────────────────
 
-/// The `[pond]` configuration section: horizon plus material and lattice lists.
+/// The `[dev_soil_peri]` configuration section: horizon plus material and lattice lists.
 #[derive(Deserialize, Clone, Default)]
 pub struct PondConfig {
     /// Peridynamic horizon δ [m] — the bond interaction radius. A point bonds to
     /// every other point within δ in the reference configuration.
     pub horizon: f64,
-    /// Material definitions (`[[pond.materials]]`).
-    pub materials: Option<Vec<PdMaterialDef>>,
-    /// Reference point-cloud blocks (`[[pond.lattice]]`).
+    /// Material definitions (`[[dev_soil_peri.materials]]`).
+    pub materials: Option<Vec<PeriMaterialDef>>,
+    /// Reference point-cloud blocks (`[[dev_soil_peri.lattice]]`).
     pub lattice: Option<Vec<LatticeDef>>,
 }
 
-/// A single `[[pond.materials]]` entry.
+/// A single `[[dev_soil_peri.materials]]` entry.
 #[derive(Deserialize, Clone)]
-pub struct PdMaterialDef {
-    /// Material name, referenced by `[[pond.lattice]] material`.
+pub struct PeriMaterialDef {
+    /// Material name, referenced by `[[dev_soil_peri.lattice]] material`.
     pub name: String,
     /// Young's modulus E [Pa].
     pub youngs_mod: f64,
@@ -81,7 +81,7 @@ pub struct PdMaterialDef {
     pub fracture_energy: Option<f64>,
 }
 
-/// A single `[[pond.lattice]]` point-cloud block.
+/// A single `[[dev_soil_peri.lattice]]` point-cloud block.
 #[derive(Deserialize, Clone)]
 pub struct LatticeDef {
     /// Name of the material these points are made of.
@@ -101,7 +101,7 @@ pub struct LatticeDef {
 /// A resolved PD material: density plus the precomputed bond constants for the
 /// configured horizon.
 #[derive(Clone, Debug)]
-pub struct PdMaterial {
+pub struct PeriMaterial {
     /// Material name.
     pub name: String,
     /// Mass density ρ [kg/m³].
@@ -118,21 +118,21 @@ pub struct PdMaterial {
 }
 
 /// Named PD materials with their precomputed bond constants. Added as a
-/// resource by [`PdAtomPlugin`].
+/// resource by [`PeriAtomPlugin`].
 #[derive(Clone, Debug, Default)]
-pub struct PdMaterialTable {
+pub struct PeriMaterialTable {
     /// The horizon δ [m] these constants were built for.
     pub horizon: f64,
     /// Resolved materials, indexed by atom type.
-    pub materials: Vec<PdMaterial>,
+    pub materials: Vec<PeriMaterial>,
 }
 
-impl PdMaterialTable {
-    /// Builds the table from the parsed `[pond]` config, precomputing the
+impl PeriMaterialTable {
+    /// Builds the table from the parsed `[dev_soil_peri]` config, precomputing the
     /// bond constants for the given horizon.
     pub fn from_config(cfg: &PondConfig) -> Self {
         let horizon = cfg.horizon;
-        assert!(horizon > 0.0, "pond.horizon must be > 0");
+        assert!(horizon > 0.0, "dev_soil_peri.horizon must be > 0");
 
         let mut materials = Vec::new();
         if let Some(defs) = &cfg.materials {
@@ -145,7 +145,7 @@ impl PdMaterialTable {
                     (None, Some(g0)) => (5.0 * g0 / (9.0 * k * horizon)).sqrt(),
                     (None, None) => f64::INFINITY, // elastic, never breaks
                 };
-                materials.push(PdMaterial {
+                materials.push(PeriMaterial {
                     name: def.name.clone(),
                     density: def.density,
                     youngs_mod: def.youngs_mod,
@@ -155,7 +155,7 @@ impl PdMaterialTable {
                 });
             }
         }
-        PdMaterialTable { horizon, materials }
+        PeriMaterialTable { horizon, materials }
     }
 
     /// Index of a material by name.
@@ -194,7 +194,7 @@ impl PdMaterialTable {
 /// - `damage` — the fraction of the point's bonds that have broken, in `[0, 1]`.
 ///   This is the field a crack shows up in.
 #[derive(AtomData)]
-pub struct PdAtom {
+pub struct PeriAtom {
     /// Reference (undeformed) position [m].
     pub ref_pos: Vec<[f64; 3]>,
     /// Cell volume represented by the point [m³].
@@ -207,17 +207,17 @@ pub struct PdAtom {
     pub damage: Vec<f64>,
 }
 
-impl Default for PdAtom {
+impl Default for PeriAtom {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl PdAtom {
-    /// Creates an empty `PdAtom` with no points. Columns are appended during
+impl PeriAtom {
+    /// Creates an empty `PeriAtom` with no points. Columns are appended during
     /// lattice generation.
     pub fn new() -> Self {
-        PdAtom {
+        PeriAtom {
             ref_pos: Vec::new(),
             volume: Vec::new(),
             n0: Vec::new(),
@@ -228,10 +228,10 @@ impl PdAtom {
 
 // ── Plugins ───────────────────────────────────────────────────────────────────
 
-/// Registers [`PdAtom`] and builds the [`PdMaterialTable`] from `[pond]` config.
-pub struct PdAtomPlugin;
+/// Registers [`PeriAtom`] and builds the [`PeriMaterialTable`] from `[dev_soil_peri]` config.
+pub struct PeriAtomPlugin;
 
-impl Plugin for PdAtomPlugin {
+impl Plugin for PeriAtomPlugin {
     fn provides(&self) -> Vec<&str> {
         vec!["pd_points"]
     }
@@ -239,10 +239,10 @@ impl Plugin for PdAtomPlugin {
     fn default_config(&self) -> Option<&str> {
         Some(
             r#"# Peridynamic horizon and materials
-[pond]
+[dev_soil_peri]
 horizon = 0.0015
 
-[[pond.materials]]
+[[dev_soil_peri.materials]]
 name = "pmma"
 youngs_mod = 3.0e9
 density = 1190.0
@@ -253,10 +253,10 @@ critical_stretch = 0.04"#,
     fn build(&self, app: &mut App) {
         app.add_plugins(AtomPlugin);
 
-        register_atom_data!(app, PdAtom::new());
+        register_atom_data!(app, PeriAtom::new());
 
-        let cfg = Config::load::<PondConfig>(app, "pond");
-        let table = PdMaterialTable::from_config(&cfg);
+        let cfg = Config::load::<PondConfig>(app, "dev_soil_peri");
+        let table = PeriMaterialTable::from_config(&cfg);
 
         app.add_resource(cfg);
         app.add_resource(table);
@@ -265,14 +265,14 @@ critical_stretch = 0.04"#,
 }
 
 /// Setup system that sets `Atom::ntypes` from the number of registered materials.
-fn set_pd_ntypes(mut atoms: ResMut<Atom>, table: Res<PdMaterialTable>) {
+fn set_pd_ntypes(mut atoms: ResMut<Atom>, table: Res<PeriMaterialTable>) {
     atoms.ntypes = table.materials.len().max(1);
 }
 
-/// Generates the reference point cloud from `[[pond.lattice]]` blocks.
-pub struct PdLatticePlugin;
+/// Generates the reference point cloud from `[[dev_soil_peri.lattice]]` blocks.
+pub struct PeriLatticePlugin;
 
-impl Plugin for PdLatticePlugin {
+impl Plugin for PeriLatticePlugin {
     fn requires(&self) -> Vec<&str> {
         vec!["pd_points"]
     }
@@ -281,7 +281,7 @@ impl Plugin for PdLatticePlugin {
         // Must run after domain decomposition so each rank's subdomain bounds
         // are populated before points are placed and filtered to the subdomain.
         app.add_setup_system(
-            pond_lattice_insert.after("domain_read_input"),
+            peri_lattice_insert.after("domain_read_input"),
             ScheduleSetupSet::Setup,
         );
     }
@@ -294,14 +294,14 @@ fn owns_position(domain: &Domain, pos: &[f64; 3]) -> bool {
     (0..3).all(|d| pos[d] >= domain.sub_domain_low[d] && pos[d] < domain.sub_domain_high[d])
 }
 
-/// Setup system: lays down a uniform grid of points for every `[[pond.lattice]]`
+/// Setup system: lays down a uniform grid of points for every `[[dev_soil_peri.lattice]]`
 /// block, placing each point at a cell centre and giving it a cell volume,
 /// mass, horizon cutoff, and the configured material type.
-fn pond_lattice_insert(
+fn peri_lattice_insert(
     mut atoms: ResMut<Atom>,
     registry: Res<soil_core::AtomDataRegistry>,
     cfg: Res<PondConfig>,
-    table: Res<PdMaterialTable>,
+    table: Res<PeriMaterialTable>,
     domain: Res<Domain>,
     comm: Res<CommResource>,
 ) {
@@ -311,7 +311,7 @@ fn pond_lattice_insert(
     };
 
     let horizon = table.horizon;
-    let mut pd = registry.expect_mut::<PdAtom>("pond_lattice_insert");
+    let mut pd = registry.expect_mut::<PeriAtom>("peri_lattice_insert");
 
     // Tags are assigned globally and sequentially. For the single-process slice
     // this is a simple running counter; cross-rank tag uniqueness is a TODO for
@@ -321,11 +321,11 @@ fn pond_lattice_insert(
 
     for lat in lattices {
         let mat_idx = table.index_of(&lat.material).unwrap_or_else(|| {
-            panic!("pond.lattice references unknown material '{}'", lat.material)
+            panic!("dev_soil_peri.lattice references unknown material '{}'", lat.material)
         });
         let density = table.materials[mat_idx].density;
         let dx = lat.spacing;
-        assert!(dx > 0.0, "pond.lattice spacing must be > 0");
+        assert!(dx > 0.0, "dev_soil_peri.lattice spacing must be > 0");
 
         let volume = dx * dx * dx;
         let mass = density * volume;
@@ -382,6 +382,6 @@ fn pond_lattice_insert(
 
     let total = comm.all_reduce_sum_f64(placed as f64) as u64;
     if comm.rank() == 0 {
-        println!("PdLattice: placed {total} peridynamic points");
+        println!("PeriLattice: placed {total} peridynamic points");
     }
 }

@@ -1,4 +1,4 @@
-# pond_bond
+# peri_bond
 
 Bond-based peridynamics for [dev_soil_peri](../../README.md).
 

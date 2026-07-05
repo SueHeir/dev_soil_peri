@@ -45,16 +45,16 @@ skin_fraction = 1.1
 bin_size = 0.0032
 every = 1
 
-[pond]
+[dev_soil_peri]
 horizon = 0.003           # delta = 3 * spacing
 
-[[pond.materials]]
+[[dev_soil_peri.materials]]
 name = "glass"
 youngs_mod = 72.0e9       # Young's modulus E [Pa]  (soda-lime glass)
 density = 2440.0          # rho [kg/m3]
 fracture_energy = 135.0   # G0 [J/m2]  ->  s0 = sqrt(5 G0 / (9 K delta))
 
-[[pond.lattice]]
+[[dev_soil_peri.lattice]]
 material = "glass"
 min = [0.0, 0.0, 0.0]     # plate: 50 mm (x, crack dir) x 40 mm (y, load) x 8 mm (z)
 max = [0.05, 0.04, 0.008]

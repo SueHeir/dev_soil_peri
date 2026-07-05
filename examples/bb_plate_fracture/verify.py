@@ -216,7 +216,7 @@ def main():
 
     print("running sub-critical case (eps = %.1e, below Griffith threshold)..."
           % SUBCRIT_STRAIN)
-    sub = run_case(env={"POND_PRESTRAIN": repr(SUBCRIT_STRAIN)})
+    sub = run_case(env={"PERI_PRESTRAIN": repr(SUBCRIT_STRAIN)})
     sub_rows = parse_crackrows(sub)
     sub_tip = max(r["tip"] for r in sub_rows) if sub_rows else 0.0
 
