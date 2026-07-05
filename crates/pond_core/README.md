@@ -1,6 +1,6 @@
 # pond_core
 
-The batteries-included umbrella crate for [POND](../../README.md) — depend on
+The batteries-included umbrella crate for [dev_soil_peri](../../README.md) — depend on
 this.
 
 ```rust
@@ -14,7 +14,7 @@ fn main() {
 }
 ```
 
-Re-exports every POND plugin crate (`pond_atom`, `pond_bond`) and the SOIL
+Re-exports every dev_soil_peri plugin crate (`pond_atom`, `pond_bond`) and the SOIL
 substrate crates it builds on, and provides two plugin groups:
 
 | Group | Purpose |

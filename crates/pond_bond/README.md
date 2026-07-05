@@ -1,6 +1,6 @@
 # pond_bond
 
-Bond-based peridynamics for [POND](../../README.md).
+Bond-based peridynamics for [dev_soil_peri](../../README.md).
 
 Each material point bonds, once in the reference configuration, to every point
 inside the horizon δ. Bonds are stored in SOIL's `BondStore` (partner addressed

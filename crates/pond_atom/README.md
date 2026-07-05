@@ -1,7 +1,7 @@
 # pond_atom
 
 Per-point peridynamics data, materials, and reference point-cloud generation
-for [POND](../../README.md).
+for [dev_soil_peri](../../README.md).
 
 - **`PdAtom`** — SOIL `AtomData` column carrying each point's reference position,
   cell volume (`#[forward]` so ghosts have it), and scalar damage.
