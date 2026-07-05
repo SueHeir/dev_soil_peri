@@ -93,7 +93,7 @@ for the MPI status of bond/family construction.
 ```bash
 # mode-I pre-notched plate fracture (single-process)
 cargo run --release --example bb_plate_fracture --no-default-features -- examples/bb_plate_fracture/config.toml
-# end-to-end validation (build + run + checks + crack-path plot)
+# end-to-end validation (build + run + checks + validation plot)
 python3 examples/bb_plate_fracture/verify.py
 ```
 
