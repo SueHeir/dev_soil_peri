@@ -1,0 +1,10 @@
+[set]
+name = "dev_soil_peri-validation"
+tier = "dev_soil_peri"
+description = "Minimal skeptic-facing gates for the peridynamics tier."
+
+[[validation]]
+id = "bb_plate_fracture"
+kind = "python-runner"
+command = "$BENCH_PYTHON examples/bb_plate_fracture/verify.py"
+reference = "Silling & Askari 2005 critical stretch/fracture-energy relation; Ha & Bobaru 2010 mode-I crack path."
