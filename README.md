@@ -1,21 +1,21 @@
-# POND — Peridynamic Off-lattice Nonlocal Deformation
+# dev_soil_peri
 
 <!-- disclaimer-banner -->
 > This code was fully written via **Claude 4.6,4.8 and Fable 5**, and stands as a proof of concept for a **bevy-like** ecosystem for physics simulation research, with the goal of testing if one scheduler/framework (**GRASS**) works for most scientific codes. **SOIL** and **FIELD** are particle- and mesh-based substrates for physics such as **DIRT** (DEM) or **dev_field_efvm**. Note that all other physics based repos I have start with **dev_**, as I do **NOT** know these methods. Please read, evaluate, use with a grain of salt, I have not personally read or reviewed everything here.
 <!-- /disclaimer-banner -->
 
 
-Peridynamics (PD) physics in the **GRASS → SOIL → {DIRT, POND}** stack.
+Peridynamics (PD) physics in the **GRASS → SOIL → {DIRT, dev_soil_peri}** stack.
 
 ```
 GRASS    framework: App, Plugin, Scheduler, IO, coupling
   └─ SOIL   substrate: Atom, domain decomposition, comm, neighbor lists
-       ├─ DIRT   DEM physics: contact, bonds, walls, clumps
-       └─ POND   peridynamics: nonlocal bond forces, fracture, damage   ← you are here
+       ├─ DIRT            DEM physics: contact, bonds, walls, clumps
+       └─ dev_soil_peri   peridynamics: nonlocal bond forces, fracture, damage   ← you are here
 ```
 
-POND is the peridynamics sibling of [DIRT](https://github.com/SueHeir/dirt). Where
-DIRT resolves short-range *contact* between discrete grains, POND resolves the
+dev_soil_peri is the peridynamics sibling of [DIRT](https://github.com/SueHeir/dirt). Where
+DIRT resolves short-range *contact* between discrete grains, dev_soil_peri resolves the
 *nonlocal* interaction of continuum material points: every point interacts with
 every neighbour inside a finite **horizon** δ through a bond, and material
 failure emerges naturally as those bonds break. It rides the
@@ -25,7 +25,7 @@ time integration — and adds only the peridynamic constitutive models.
 
 The fit is close to exact: a PD point cloud *is* a SOIL atom set, the PD horizon
 *is* a SOIL neighbour cutoff, and the PD family (the fixed set of bonds formed in
-the reference configuration) *is* a SOIL [`BondStore`]. POND therefore reuses
+the reference configuration) *is* a SOIL [`BondStore`]. dev_soil_peri therefore reuses
 SOIL's persistent, tag-addressed, MPI-aware bond storage rather than inventing
 its own.
 
@@ -69,13 +69,13 @@ bonds that have broken, and a crack is simply the locus where damage → 1.
 
 ## Building
 
-Clone POND and build — its [soil](https://github.com/SueHeir/soil) and
+Clone dev_soil_peri and build — its [soil](https://github.com/SueHeir/soil) and
 [grass](https://github.com/SueHeir/grass) dependencies are pulled from GitHub
 automatically.
 
 ```bash
-git clone https://github.com/SueHeir/pond
-cd pond
+git clone https://github.com/SueHeir/dev_soil_peri
+cd dev_soil_peri
 cargo run --release --example bb_bar_tension --no-default-features -- examples/bb_bar_tension/config.toml
 ```
 
