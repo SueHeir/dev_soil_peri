@@ -18,10 +18,15 @@
 //!    it back to `G0`. This checks the s0<->G0 relation against the *definition*
 //!    of fracture energy, not against itself.
 //!
-//! 2. **Crack propagation emerges.** The notch tip position is tracked in time;
-//!    the crack advances beyond the notch at a finite, sub-Rayleigh speed, and
-//!    the damage stays localised on the symmetry plane (a crack, not diffuse
-//!    failure).
+//! 2. **Reference crack trajectory.** The notch tip position is tracked in time
+//!    and compared with a digitized Ha & Bobaru (2010) crack-speed trace
+//!    integrated to crack extension. The comparison is intentionally loose and
+//!    normalized to the active propagation window because this teaching-scale
+//!    mesh is smaller than the published plate.
+//!
+//! 3. **Crack propagation emerges.** The crack advances beyond the notch at a
+//!    finite, sub-Rayleigh speed, and the damage stays localised on the symmetry
+//!    plane (a crack, not diffuse failure).
 //!
 //! Reference: Silling & Askari, Comput. Struct. 83 (2005) 1526; Ha & Bobaru,
 //! Int. J. Fract. 162 (2010) 229.

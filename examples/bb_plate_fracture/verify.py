@@ -12,15 +12,24 @@ Builds and runs the POND `bb_plate_fracture` example (single-process,
      fracture energy to the coarse-mesh quadrature accuracy of the bare
      constant-micromodulus model (~18% low at m = delta/dx = 3).
 
-  2. CRACK PROPAGATION EMERGES.  Under a super-critical mode-I load the crack tip
-     advances monotonically from the notch across the ligament at a finite,
-     sub-Rayleigh speed.  The path is prescribed nowhere -- it comes out of the
+  2. DIGITIZED REFERENCE CRACK CURVE.  Under a super-critical mode-I load the
+     crack-tip trajectory is compared to a digitized Ha & Bobaru (2010) crack
+     propagation trace.  Their published Figure 11(d) reports crack speed versus
+     time for the soda-lime-glass plate; integrating the digitized speed trace
+     gives the reference crack-extension-versus-time curve used here.  Because
+     this example uses a smaller teaching mesh, the check compares normalized
+     extension over the active propagation window, plus the dimensional mean
+     speed, within loose qualitative tolerances.
+
+  3. CRACK PROPAGATION EMERGES.  The same super-critical run must advance
+     monotonically from the notch across the ligament at a finite, sub-Rayleigh
+     speed.  The path is prescribed nowhere -- it comes out of the
      critical-stretch bond breakage.
 
-  3. CORRECT (MODE-I) CRACK PATH.  In the final damage field the crack is a
+  4. CORRECT (MODE-I) CRACK PATH.  In the final damage field the crack is a
      straight line on the symmetry plane y = H/2, spanning most of the width.
 
-  4. EMERGENT GRIFFITH THRESHOLD.  A sub-critical applied strain (stored energy
+  5. EMERGENT GRIFFITH THRESHOLD.  A sub-critical applied strain (stored energy
      release rate below G0) leaves the notch dormant -- no propagation -- while
      the super-critical load drives it across.  The crack respects an energy
      threshold; it does not run at any load.
@@ -49,6 +58,36 @@ A0 = 0.02              # pre-notch length [m]
 PLATE_X_MAX = 0.05     # plate width [m]
 C_RAYLEIGH = 3160.0    # Rayleigh speed for soda-lime glass ~ 0.92 c_s [m/s]
 SUBCRIT_STRAIN = 1.5e-4  # applied far-field strain below the Griffith threshold
+
+# Ha & Bobaru (2010), Fig. 11(d), orange curve: "Crack speed by
+# peridynamics (horizon = 0.5 mm)" for soda-lime glass, digitized manually from
+# the published plot.  Units are microseconds and m/s.  The paper publishes a
+# speed trace rather than a direct a(t); we integrate it below to obtain the
+# crack-extension-vs-time reference curve.  This is intentionally static
+# reference evidence, not fitted to this example's output.
+REFERENCE_SPEED_DIGITIZED = [
+    (0.0, 0.0),
+    (2.0, 0.0),
+    (4.0, 0.0),
+    (6.0, 150.0),
+    (8.0, 900.0),
+    (10.0, 1350.0),
+    (12.0, 1375.0),
+    (14.0, 1250.0),
+    (16.0, 1000.0),
+    (18.0, 1180.0),
+    (20.0, 1530.0),
+    (22.0, 1300.0),
+    (24.0, 1680.0),
+    (26.0, 1600.0),
+    (28.0, 1500.0),
+    (30.0, 1380.0),
+    (32.0, 1280.0),
+    (34.0, 1300.0),
+    (36.0, 1330.0),
+    (38.0, 1380.0),
+    (40.0, 1450.0),
+]
 
 
 def run(cmd, env=None, **kw):
@@ -93,6 +132,41 @@ def parse_crackrows(out):
                          tip=float(m.group(3)), ncrack=float(m.group(4)),
                          sumd=float(m.group(5)), ke=float(m.group(6))))
     return rows
+
+
+def digitized_reference_crack_curve():
+    """Return (time_s, extension_m) from the integrated digitized reference."""
+    out = []
+    extension = 0.0
+    last_t_us, last_v = REFERENCE_SPEED_DIGITIZED[0]
+    out.append((last_t_us * 1e-6, extension))
+    for t_us, v in REFERENCE_SPEED_DIGITIZED[1:]:
+        dt = (t_us - last_t_us) * 1e-6
+        extension += 0.5 * (last_v + v) * dt
+        out.append((t_us * 1e-6, extension))
+        last_t_us, last_v = t_us, v
+    return out
+
+
+def interp_curve(points, x):
+    if x <= points[0][0]:
+        return points[0][1]
+    if x >= points[-1][0]:
+        return points[-1][1]
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        if x0 <= x <= x1:
+            a = (x - x0) / (x1 - x0)
+            return y0 + a * (y1 - y0)
+    return points[-1][1]
+
+
+def normalized_active_curve(points, min_extension):
+    active = [(t, x) for t, x in points if x >= min_extension]
+    if len(active) < 2:
+        return []
+    t0, x0 = active[0]
+    t1, x1 = active[-1]
+    return [((t - t0) / (t1 - t0), (x - x0) / (x1 - x0)) for t, x in active]
 
 
 def load_field():
@@ -155,7 +229,45 @@ def main():
                    "discrete G0_measured=%.1f (%.0f%% of G0, coarse-mesh m=3)"
                    % (ana, G0, mea, 100 * mea / G0), round_trip and corrob))
 
-    # --- Check 2: crack propagation emerges (monotone, finite sub-Rayleigh) ---
+    # --- Check 2: digitized reference crack-extension curve ---
+    ref_curve = digitized_reference_crack_curve()
+    ref_norm = normalized_active_curve(ref_curve, min_extension=1.0e-3)
+    sim_curve = [
+        (r["t"], max(0.0, r["tip"] - A0))
+        for r in rows
+        if r["tip"] < PLATE_X_MAX - 1.0e-3
+    ]
+    sim_norm = normalized_active_curve(sim_curve, min_extension=1.0e-3)
+    ref_avg_speed = None
+    track_rmse = None
+    track_max = None
+    track_ok = False
+    speed_ratio = None
+    if len(ref_norm) >= 2 and len(sim_norm) >= 2:
+        # Compare the shape of a(t) over each active propagation window.  The
+        # reference plate is twice as long in x, so absolute crack length is not
+        # the right quantity for this teaching-scale mesh; the dimensional speed
+        # check below keeps the comparison tied to physical time.
+        err2 = []
+        abs_err = []
+        for tau, a_sim in sim_norm:
+            if 0.0 <= tau <= 1.0:
+                a_ref = interp_curve(ref_norm, tau)
+                e = a_sim - a_ref
+                err2.append(e * e)
+                abs_err.append(abs(e))
+        if err2:
+            track_rmse = (sum(err2) / len(err2)) ** 0.5
+            track_max = max(abs_err)
+        ref_t0, ref_x0 = ref_curve[0]
+        for t, x in ref_curve:
+            if x >= 1.0e-3:
+                ref_t0, ref_x0 = t, x
+                break
+        ref_t1, ref_x1 = ref_curve[-1]
+        ref_avg_speed = (ref_x1 - ref_x0) / (ref_t1 - ref_t0)
+
+    # --- Check 3: crack propagation emerges (monotone, finite sub-Rayleigh) ---
     tips = [r["tip"] for r in rows]
     monotone = all(b >= a - 1e-9 for a, b in zip(tips, tips[1:]))
     advanced = max(tips) - A0
@@ -168,7 +280,19 @@ def main():
                    "speed=%.0f m/s (0<v<c_R=%.0f)"
                    % (tips[0], max(tips), monotone, speed or -1, C_RAYLEIGH), ok))
 
-    # --- Check 3: correct mode-I path (straight crack on the symmetry plane) ---
+    if speed is not None and ref_avg_speed is not None and track_rmse is not None:
+        speed_ratio = speed / ref_avg_speed
+        # Qualitative fracture-validation tolerances: <=25% RMS normalized
+        # trajectory error, <=40% worst-point deviation, and mean speed within
+        # +/-35% of the digitized Ha-Bobaru trace.
+        track_ok = track_rmse <= 0.25 and track_max <= 0.40 and 0.65 <= speed_ratio <= 1.35
+    checks.append(("digitized Ha-Bobaru Fig. 11(d) crack curve: normalized "
+                   "RMSE=%.3f (tol 0.25), max=%.3f (tol 0.40), mean speed "
+                   "%.0f vs ref %.0f m/s (ratio %.2f, tol 0.65-1.35)"
+                   % (track_rmse or -1, track_max or -1, speed or -1,
+                      ref_avg_speed or -1, speed_ratio or -1), track_ok))
+
+    # --- Check 4: correct mode-I path (straight crack on the symmetry plane) ---
     hi = [(x, y) for x, y, d in zip(xs, ys, ds) if d > 0.35]
     on = [(x, y) for x, y in hi if abs(y - Y_MID) < 1.1e-3]
     frac_on = len(on) / max(1, len(hi))
@@ -177,7 +301,7 @@ def main():
     checks.append(("mode-I path: %.0f%% of damage on plane y=%.3f, spanning "
                    "%.3f m of width" % (100 * frac_on, Y_MID, span), ok))
 
-    # --- Check 4: emergent Griffith threshold ---
+    # --- Check 5: emergent Griffith threshold ---
     #  sub-critical load must NOT advance the crack (tip stays at the notch),
     #  while the super-critical load did.
     sub_static = sub_tip <= A0 + 2e-3
