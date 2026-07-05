@@ -1,17 +1,17 @@
 [package]
-name = "pond_core"
+name = "peri_core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "../../README.md"
-description = "Peridynamics simulation framework with plugin architecture (POND umbrella crate)"
+description = "Peridynamics simulation framework with plugin architecture (dev_soil_peri umbrella crate)"
 keywords = ["peridynamics", "nonlocal", "simulation", "fracture"]
 categories = ["simulation", "science"]
 
 [features]
 default = ["mpi_backend"]
-mpi_backend = ["soil_core/mpi_backend", "pond_atom/mpi_backend", "pond_bond/mpi_backend"]
+mpi_backend = ["soil_core/mpi_backend", "peri_atom/mpi_backend", "peri_bond/mpi_backend"]
 
 [dependencies]
 grass_scheduler = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
@@ -23,5 +23,5 @@ soil_print = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
 soil_derive = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
 soil_deform = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
 soil_fixes = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
-pond_atom = { path = "../pond_atom", version = "0.1.0" }
-pond_bond = { path = "../pond_bond", version = "0.1.0" }
+peri_atom = { path = "../peri_atom", version = "0.1.0" }
+peri_bond = { path = "../peri_bond", version = "0.1.0" }

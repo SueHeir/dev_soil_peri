@@ -1,11 +1,11 @@
 [package]
-name = "pond_atom"
+name = "peri_atom"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
-description = "Per-point peridynamics data (PdAtom), PD materials, and lattice point-cloud generation for POND"
+description = "Per-point peridynamics data (PeriAtom), PD materials, and lattice point-cloud generation for dev_soil_peri"
 keywords = ["peridynamics", "atom", "material", "simulation"]
 categories = ["simulation", "science"]
 

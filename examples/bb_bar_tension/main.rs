@@ -9,9 +9,9 @@
 //! cargo run --release --example bb_bar_tension --no-default-features -- examples/bb_bar_tension/config.toml
 //! ```
 
-use pond_core::prelude::*;
+use peri_core::prelude::*;
 
-/// Reference x-bounds of the bar [m] (must match `[[pond.lattice]]`).
+/// Reference x-bounds of the bar [m] (must match `[[dev_soil_peri.lattice]]`).
 const BAR_X_MIN: f64 = 0.0;
 const BAR_X_MAX: f64 = 0.04;
 /// Grip width at each end [m].
@@ -50,7 +50,7 @@ fn set_timestep(mut atoms: ResMut<Atom>, run_config: Res<RunConfig>) {
 /// grips have their force zeroed so the imposed velocity is not perturbed by
 /// the bond force during the final integration half-step.
 fn apply_grips(mut atoms: ResMut<Atom>, registry: Res<AtomDataRegistry>) {
-    let pd = registry.expect::<PdAtom>("apply_grips");
+    let pd = registry.expect::<PeriAtom>("apply_grips");
     let nlocal = atoms.nlocal as usize;
     for i in 0..nlocal {
         let x0 = pd.ref_pos[i][0];
@@ -76,7 +76,7 @@ fn report(
         return;
     }
 
-    let pd = registry.expect::<PdAtom>("report");
+    let pd = registry.expect::<PeriAtom>("report");
     let nlocal = atoms.nlocal as usize;
     let mut ke = 0.0f64;
     let mut dmax = 0.0f64;

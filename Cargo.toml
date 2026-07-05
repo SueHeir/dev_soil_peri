@@ -1,10 +1,10 @@
 [package]
-name = "pond-bin"
+name = "peri-bin"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "POND peridynamics simulation examples and binaries"
+description = "dev_soil_peri peridynamics simulation examples and binaries"
 publish = false
 
 [workspace]
@@ -20,7 +20,7 @@ repository = "https://github.com/SueHeir/dev_soil_peri"
 
 [features]
 default = ["mpi_backend"]
-mpi_backend = ["pond_core/mpi_backend", "dep:libffi-sys"]
+mpi_backend = ["peri_core/mpi_backend", "dep:libffi-sys"]
 
 [[example]]
 name = "bb_bar_tension"
@@ -37,7 +37,7 @@ codegen-units = 1
 panic = "abort"
 
 [dependencies]
-pond_core = { path = "./crates/pond_core", default-features = false }
+peri_core = { path = "./crates/peri_core", default-features = false }
 serde = { version = "1", features = ["derive"] }
 # Force libffi-sys to use system libffi (via pkg-config) instead of building
 # from source. libffi-sys 2.3.0 has a broken aarch64 macOS assembler; Homebrew

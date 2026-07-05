@@ -31,10 +31,10 @@ its own.
 
 ## Layout
 
-`pond_core` is the batteries-included umbrella crate (depend on this):
+`peri_core` is the batteries-included umbrella crate (depend on this):
 
 ```rust
-use pond_core::prelude::*;
+use peri_core::prelude::*;
 
 fn main() {
     let mut app = App::new();
@@ -46,9 +46,9 @@ fn main() {
 
 | crate | role |
 |---|---|
-| [`pond_core`](crates/pond_core/README.md) | umbrella: `CorePlugins`, `BondBasedDefaultPlugins`, prelude |
-| [`pond_atom`](crates/pond_atom/README.md) | per-point PD data (`PdAtom`: reference position, volume, damage), PD materials, lattice point-cloud generation |
-| [`pond_bond`](crates/pond_bond/README.md) | bond-based peridynamics: constant-micromodulus pairwise force, critical-stretch bond breakage, damage field |
+| [`peri_core`](crates/peri_core/README.md) | umbrella: `CorePlugins`, `BondBasedDefaultPlugins`, prelude |
+| [`peri_atom`](crates/peri_atom/README.md) | per-point PD data (`PeriAtom`: reference position, volume, damage), PD materials, lattice point-cloud generation |
+| [`peri_bond`](crates/peri_bond/README.md) | bond-based peridynamics: constant-micromodulus pairwise force, critical-stretch bond breakage, damage field |
 
 ## Theory in one paragraph
 
@@ -64,7 +64,7 @@ irreversibly once its stretch exceeds the critical stretch `s₀ = √(5G₀ / 9
 bonds that have broken, and a crack is simply the locus where damage → 1.
 
 > **State-based PD** (ordinary and non-ordinary/correspondence), which removes
-> the ν = 1/4 restriction, is the planned next tier (`pond_state`) on this same
+> the ν = 1/4 restriction, is the planned next tier (`peri_state`) on this same
 > substrate.
 
 ## Building

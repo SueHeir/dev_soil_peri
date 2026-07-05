@@ -1,4 +1,4 @@
-//! # pond_bond — Bond-based peridynamics
+//! # peri_bond — Bond-based peridynamics
 //!
 //! Bond-based peridynamics (PD) on the SOIL substrate. Each material point
 //! bonds, once and for all in the **reference configuration**, to every other
@@ -31,7 +31,7 @@
 //!
 //! A broken bond is flagged in place by setting its [`BondEntry::bond_type`] to
 //! [`BOND_BROKEN`]; the initial bond count (the damage denominator) is stored as
-//! the [`PdAtom::n0`](pond_atom::PdAtom) column. Both live in registered
+//! the [`PeriAtom::n0`](peri_atom::PeriAtom) column. Both live in registered
 //! `AtomData`, so they are permuted and migrated *with* the atoms by the
 //! substrate — no side resource to fall out of sync when SOIL spatially sorts
 //! or migrates points.
@@ -48,7 +48,7 @@ use std::collections::HashMap;
 use grass_app::prelude::*;
 use grass_scheduler::prelude::*;
 
-use pond_atom::{PdAtom, PdMaterialTable};
+use peri_atom::{PeriAtom, PeriMaterialTable};
 use soil_core::{
     Atom, AtomDataRegistry, BondEntry, BondStore, CommResource, Domain, ParticleSimScheduleSet,
     ScheduleSetupSet,
@@ -77,7 +77,7 @@ impl Plugin for BondBasedPlugin {
         app.add_plugins(soil_core::BondPlugin);
 
         app.add_setup_system(
-            build_families.label("pond_build_families"),
+            build_families.label("peri_build_families"),
             ScheduleSetupSet::PostSetup,
         );
         app.add_update_system(bond_based_force, ParticleSimScheduleSet::Force);
@@ -89,16 +89,16 @@ impl Plugin for BondBasedPlugin {
 /// For every local point pair within the horizon, pushes a [`BondEntry`] onto
 /// both endpoints (so each point's family is complete) recording the reference
 /// bond length `r₀`, then records each point's initial bond count in
-/// [`PdAtom::n0`](pond_atom::PdAtom).
+/// [`PeriAtom::n0`](peri_atom::PeriAtom).
 pub fn build_families(
     atoms: Res<Atom>,
     registry: Res<AtomDataRegistry>,
-    table: Res<PdMaterialTable>,
+    table: Res<PeriMaterialTable>,
     domain: Res<Domain>,
     comm: Res<CommResource>,
 ) {
     let mut bond_store = registry.expect_mut::<BondStore>("build_families");
-    let mut pd = registry.expect_mut::<PdAtom>("build_families");
+    let mut pd = registry.expect_mut::<PeriAtom>("build_families");
     let nlocal = atoms.nlocal as usize;
 
     // Idempotent: only build once (setup may be revisited across stages).
@@ -160,10 +160,10 @@ pub fn build_families(
 pub fn bond_based_force(
     mut atoms: ResMut<Atom>,
     registry: Res<AtomDataRegistry>,
-    table: Res<PdMaterialTable>,
+    table: Res<PeriMaterialTable>,
 ) {
     let mut bond_store = registry.expect_mut::<BondStore>("bond_based_force");
-    let mut pd = registry.expect_mut::<PdAtom>("bond_based_force");
+    let mut pd = registry.expect_mut::<PeriAtom>("bond_based_force");
 
     let nlocal = atoms.nlocal as usize;
     let ntotal = atoms.len();

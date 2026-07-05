@@ -1,11 +1,11 @@
 [package]
-name = "pond_bond"
+name = "peri_bond"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
-description = "Bond-based peridynamics for POND: constant-micromodulus pairwise force, critical-stretch breakage, damage"
+description = "Bond-based peridynamics for dev_soil_peri: constant-micromodulus pairwise force, critical-stretch breakage, damage"
 keywords = ["peridynamics", "bond-based", "fracture", "simulation"]
 categories = ["simulation", "science"]
 
@@ -13,9 +13,9 @@ categories = ["simulation", "science"]
 soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "main", default-features = false }
 grass_app = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
 grass_scheduler = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
-pond_atom = { path = "../pond_atom", version = "0.1.0" }
+peri_atom = { path = "../peri_atom", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 
 [features]
 default = []
-mpi_backend = ["soil_core/mpi_backend", "pond_atom/mpi_backend"]
+mpi_backend = ["soil_core/mpi_backend", "peri_atom/mpi_backend"]
