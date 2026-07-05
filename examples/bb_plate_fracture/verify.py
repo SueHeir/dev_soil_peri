@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the bond-based mode-I pre-notched plate fracture example.
 
-Builds and runs the POND `bb_plate_fracture` example (single-process,
+Builds and runs the dev_soil_peri `bb_plate_fracture` example (single-process,
 `--no-default-features`) and checks that:
 
   1. GRIFFITH RELATION (s0 <-> G0).  The library derives the critical stretch
