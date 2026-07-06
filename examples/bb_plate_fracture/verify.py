@@ -179,26 +179,104 @@ def load_field():
     return xs, ys, ds
 
 
-def maybe_plot(rows, field):
+def maybe_plot(rows, field, ana, mea, speed, ref_avg_speed, speed_ratio,
+               track_rmse, track_max):
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        import numpy as np
     except Exception:
         return None
     xs, ys, ds = field
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4))
-    sc = a1.scatter(xs, ys, c=ds, s=6, cmap="inferno", vmin=0, vmax=1)
-    a1.axhline(Y_MID, color="c", lw=0.6, ls="--")
-    a1.set_title("final damage (mid-thickness slice)")
-    a1.set_xlabel("x [m]"); a1.set_ylabel("y [m]"); a1.set_aspect("equal")
-    fig.colorbar(sc, ax=a1, label="damage")
-    a2.plot([r["t"] * 1e6 for r in rows], [r["tip"] * 1e3 for r in rows], "-o", ms=3)
-    a2.axhline(A0 * 1e3, color="k", ls=":", label="notch tip")
-    a2.set_title("crack tip vs time"); a2.set_xlabel("t [us]")
-    a2.set_ylabel("tip x [mm]"); a2.legend()
+
+    ref_curve = digitized_reference_crack_curve()
+    ref_norm = normalized_active_curve(ref_curve, min_extension=1.0e-3)
+    sim_curve = [
+        (r["t"], max(0.0, r["tip"] - A0))
+        for r in rows
+        if r["tip"] < PLATE_X_MAX - 1.0e-3
+    ]
+    sim_norm = normalized_active_curve(sim_curve, min_extension=1.0e-3)
+    tau_grid = np.linspace(0.0, 1.0, 200)
+    ref_grid = np.array([interp_curve(ref_norm, float(t)) for t in tau_grid])
+    sim_err = [(tau, abs(a_sim - interp_curve(ref_norm, tau)))
+               for tau, a_sim in sim_norm if 0.0 <= tau <= 1.0]
+
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    (a1, a2), (a3, a4) = axes
+
+    a1.fill_between(
+        tau_grid,
+        np.clip(ref_grid - 0.40, 0.0, 1.0),
+        np.clip(ref_grid + 0.40, 0.0, 1.0),
+        color="#d9ead3",
+        alpha=0.65,
+        label="max-error pass band (+/-0.40)",
+    )
+    a1.plot(tau_grid, ref_grid, color="#1f77b4", lw=2.0,
+            label="digitized Ha-Bobaru ref.")
+    if sim_norm:
+        a1.plot([t for t, _ in sim_norm], [x for _, x in sim_norm],
+                "o-", color="#d62728", ms=4, label="measured run")
+    a1.set_title("crack extension vs reference")
+    a1.set_xlabel("normalized active time")
+    a1.set_ylabel("normalized crack extension")
+    a1.set_xlim(0, 1); a1.set_ylim(-0.03, 1.03)
+    a1.legend(fontsize=8, loc="lower right")
+
+    if sim_err:
+        a2.plot([t for t, _ in sim_err], [e for _, e in sim_err],
+                "o-", color="#9467bd", ms=4)
+    a2.axhline(0.40, color="#d62728", ls="--", lw=1.5,
+               label="max tol 0.40")
+    a2.axhline(0.25, color="#ff7f0e", ls=":", lw=1.5,
+               label="RMSE tol 0.25")
+    a2.set_title("trajectory error gates")
+    a2.set_xlabel("normalized active time")
+    a2.set_ylabel("|measured - reference|")
+    a2.set_xlim(0, 1); a2.set_ylim(0, 0.45)
+    a2.legend(fontsize=8, loc="upper right")
+    a2.text(
+        0.02, 0.91,
+        "RMSE %.3f; max %.3f\nspeed ratio %.2f (tol 0.65-1.35)"
+        % (track_rmse or -1, track_max or -1, speed_ratio or -1),
+        transform=a2.transAxes,
+        fontsize=8,
+        va="top",
+        bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="#cccccc"),
+    )
+
+    labels = ["analytic\nfrom s0", "measured\nbond sum"]
+    vals = [ana, mea]
+    a3.axhspan(0.70 * G0, 1.30 * G0, color="#d9ead3", alpha=0.65,
+               label="+/-30% discrete-sum gate")
+    a3.axhline(G0, color="#1f77b4", lw=2, label="configured G0")
+    a3.bar(labels, vals, color=["#4c78a8", "#f58518"], width=0.55)
+    a3.set_title("critical-stretch / fracture-energy check")
+    a3.set_ylabel("G0 [J/m^2]")
+    a3.set_ylim(0, 1.45 * G0)
+    a3.legend(fontsize=8, loc="upper right")
+    a3.text(
+        0.04, 0.88,
+        "s0 relation round-trip: %.3f J/m^2\nmeasured/G0: %.2f"
+        % (ana, mea / G0),
+        transform=a3.transAxes,
+        fontsize=8,
+        va="top",
+        bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="#cccccc"),
+    )
+
+    sc = a4.scatter(xs, ys, c=ds, s=6, cmap="inferno", vmin=0, vmax=1)
+    a4.axhline(Y_MID, color="c", lw=0.6, ls="--")
+    a4.set_title("final damage field")
+    a4.set_xlabel("x [m]"); a4.set_ylabel("y [m]"); a4.set_aspect("equal")
+    fig.colorbar(sc, ax=a4, label="damage")
+
     fig.tight_layout()
-    out = os.path.join(REPO, "examples", EXAMPLE, "crack_path.png")
+    out_dir = os.path.join(REPO, "examples", EXAMPLE, "plots")
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, "validation.png")
     fig.savefig(out, dpi=110)
     return out
 
@@ -311,7 +389,8 @@ def main():
                    % (SUBCRIT_STRAIN, sub_tip, max(tips)),
                    sub_static and super_ran))
 
-    png = maybe_plot(rows, (xs, ys, ds))
+    png = maybe_plot(rows, (xs, ys, ds), ana, mea, speed, ref_avg_speed,
+                     speed_ratio, track_rmse, track_max)
     if png:
         print("wrote", os.path.relpath(png, REPO))
 
