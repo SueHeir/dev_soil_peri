@@ -70,32 +70,42 @@ const PRESTRAIN: f64 = 5.0e-4;
 /// Damage level above which a point is considered part of the crack.
 const CRACK_DAMAGE: f64 = 0.35;
 
+#[derive(Default)]
+struct ReferenceSetupState {
+    griffith_checked: bool,
+    notch_done: bool,
+    prestrain_done: bool,
+}
+
 fn main() {
     let mut app = App::new();
     app.add_plugins(CorePlugins)
         .add_plugins(BondBasedDefaultPlugins);
+    app.add_resource(ReferenceSetupState::default());
 
     app.add_setup_system(set_timestep, ScheduleSetupSet::PostSetup);
 
     // Griffith energy check on the *intact* reference family, then carve the
-    // pre-notch — both after the family is built.
-    app.add_setup_system(
+    // pre-notch after SOIL has built the initial neighbour/halo data and the
+    // peridynamic family. These one-shot systems run in the neighbour stage so
+    // cross-rank bonds are present before the first force evaluation.
+    app.add_update_system(
         griffith_energy_check
             .after("peri_build_families")
             .label("peri_griffith_check"),
-        ScheduleSetupSet::PostSetup,
+        ParticleSimScheduleSet::Neighbor,
     );
-    app.add_setup_system(
+    app.add_update_system(
         introduce_notch
             .after("peri_griffith_check")
             .label("peri_notch"),
-        ScheduleSetupSet::PostSetup,
+        ParticleSimScheduleSet::Neighbor,
     );
     // Displacement-control loading: pre-stretch the plate in y after the notch
     // is carved and the reference bonds (r0) are recorded.
-    app.add_setup_system(
+    app.add_update_system(
         apply_prestrain.after("peri_notch"),
-        ScheduleSetupSet::PostSetup,
+        ParticleSimScheduleSet::Neighbor,
     );
 
     // Hold the grips fixed at their pre-stretched positions every step (after
@@ -140,7 +150,12 @@ fn griffith_energy_check(
     registry: Res<AtomDataRegistry>,
     table: Res<PeriMaterialTable>,
     comm: Res<CommResource>,
+    mut setup: ResMut<ReferenceSetupState>,
 ) {
+    if setup.griffith_checked {
+        return;
+    }
+    setup.griffith_checked = true;
     if comm.rank() != 0 {
         return;
     }
@@ -214,13 +229,19 @@ fn introduce_notch(
     atoms: Res<Atom>,
     registry: Res<AtomDataRegistry>,
     comm: Res<CommResource>,
+    mut setup: ResMut<ReferenceSetupState>,
 ) {
+    if setup.notch_done {
+        return;
+    }
+    setup.notch_done = true;
     let mut bond_store = registry.expect_mut::<BondStore>("introduce_notch");
     let mut pd = registry.expect_mut::<PeriAtom>("introduce_notch");
     let nlocal = atoms.nlocal as usize;
+    let ntotal = atoms.len();
 
-    let mut tag_to_index: HashMap<u32, usize> = HashMap::with_capacity(nlocal);
-    for i in 0..nlocal {
+    let mut tag_to_index: HashMap<u32, usize> = HashMap::with_capacity(ntotal);
+    for i in 0..ntotal {
         tag_to_index.insert(atoms.tag[i], i);
     }
 
@@ -277,7 +298,16 @@ fn introduce_notch(
 /// lengths (`r0`) were already recorded from the undeformed lattice, so this
 /// pre-stretch loads every bond; the grips (held fixed by [`hold_grips`]) then
 /// store this as elastic energy that drives the crack.
-fn apply_prestrain(mut atoms: ResMut<Atom>, registry: Res<AtomDataRegistry>, comm: Res<CommResource>) {
+fn apply_prestrain(
+    mut atoms: ResMut<Atom>,
+    registry: Res<AtomDataRegistry>,
+    comm: Res<CommResource>,
+    mut setup: ResMut<ReferenceSetupState>,
+) {
+    if setup.prestrain_done {
+        return;
+    }
+    setup.prestrain_done = true;
     // The verifier brackets the Griffith threshold by running sub- and
     // super-critical loads; allow the strain to be overridden without editing
     // the (declarative) config. Defaults to `PRESTRAIN`.

@@ -8,3 +8,9 @@ id = "bb_plate_fracture"
 kind = "python-runner"
 command = "$BENCH_PYTHON examples/bb_plate_fracture/verify.py"
 reference = "Silling & Askari 2005 critical stretch/fracture-energy relation; Ha & Bobaru 2010 mode-I crack path."
+
+[[validation]]
+id = "peri_family_consistency"
+kind = "python-runner"
+command = "$BENCH_PYTHON examples/peri_family_consistency/sweep.py"
+reference = "One-rank vs two-rank SOIL neighbor/halo-backed reference-family equivalence for bond counts, breakage damage, and crack-path span."

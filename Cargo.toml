@@ -30,6 +30,10 @@ path = "examples/bb_bar_tension/main.rs"
 name = "bb_plate_fracture"
 path = "examples/bb_plate_fracture/main.rs"
 
+[[example]]
+name = "peri_family_consistency"
+path = "examples/peri_family_consistency/main.rs"
+
 [profile.release]
 opt-level = 3
 lto = "fat"
