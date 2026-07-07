@@ -13,10 +13,10 @@ and by a direct discrete bond-energy sum across the crack plane.
 ![bb plate fracture validation](plots/validation.png)
 
 Current validation result: PASS. The measured normalized crack trajectory has
-RMSE 0.146 against a 0.25 gate and max error 0.230 against a 0.40 gate; the mean
+RMSE 0.139 against a 0.25 gate and max error 0.230 against a 0.40 gate; the mean
 speed ratio is 1.27 against the 0.65-1.35 gate. The critical-stretch relation
 round-trips to `G0 = 135.000 J/m^2`, and the direct coarse-mesh bond sum gives
-`109.7 J/m^2` (81% of `G0`, within the 70-130% gate).
+`110.7 J/m^2` (82% of `G0`, within the 70-130% gate).
 
 Run the validation from the repository root:
 

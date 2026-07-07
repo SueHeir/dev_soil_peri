@@ -17,6 +17,7 @@ point's broken bonds is its **damage**, and a crack is the locus where damage �
 Each point applies the force only to itself (a bond is evaluated by both
 endpoints), so the force loop needs no Newton's-third-law reverse communication.
 
-**Status:** family construction is an `O(N²)` reference-config pass over local
-points — single-process for now (run with `--no-default-features`). Neighbour-
-list-accelerated and cross-rank family construction are the next step.
+**Status:** family construction walks SOIL's binned neighbour/halo data in the
+reference configuration. Families may include cross-rank partners, addressed by
+global tag, while bond topology stays in SOIL's migrating/restartable
+`BondStore`.

@@ -6,4 +6,5 @@ cd "$(dirname "$0")/.."
 
 echo "=== dev_soil_peri validation set ==="
 "$BENCH_PYTHON" examples/bb_plate_fracture/verify.py
+"$BENCH_PYTHON" examples/peri_family_consistency/sweep.py
 echo "ALL VALIDATIONS PASSED"

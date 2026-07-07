@@ -1,0 +1,42 @@
+# Cross-rank family consistency validation, one-rank reference.
+
+[comm]
+processors_x = 1
+processors_y = 1
+processors_z = 1
+
+[domain]
+x_low = -0.02
+x_high = 1.02
+y_low = -0.02
+y_high = 0.52
+z_low = -0.02
+z_high = 0.27
+boundary_x = "fixed"
+boundary_y = "fixed"
+boundary_z = "fixed"
+
+[neighbor]
+skin_fraction = 1.1
+bin_size = 0.13
+every = 1
+
+[dev_soil_peri]
+horizon = 0.13
+
+[[dev_soil_peri.materials]]
+name = "elastic"
+youngs_mod = 1.0e6
+density = 1000.0
+critical_stretch = 1.0
+
+[[dev_soil_peri.lattice]]
+material = "elastic"
+min = [0.0, 0.0, 0.0]
+max = [1.0, 0.5, 0.25]
+spacing = 0.05
+
+[run]
+steps = 1
+dt = 1.0e-8
+thermo = 1

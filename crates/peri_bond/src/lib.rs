@@ -38,20 +38,20 @@
 //!
 //! ## Status
 //!
-//! Family construction ([`build_families`]) is an `O(N²)` reference-config pass
-//! over **local** points, so the current slice is single-process
-//! (`--no-default-features`). Cross-rank bonds and a neighbour-list-accelerated
-//! build are the next step.
+//! Family construction ([`build_families`]) walks SOIL's binned neighbour/halo
+//! data in the reference configuration. Partners are recorded by global tag, so
+//! bonds can cross MPI rank boundaries while the [`BondStore`] still migrates
+//! and restarts with the owning atom.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use grass_app::prelude::*;
 use grass_scheduler::prelude::*;
 
 use peri_atom::{PeriAtom, PeriMaterialTable};
 use soil_core::{
-    Atom, AtomDataRegistry, BondEntry, BondStore, CommResource, Domain, ParticleSimScheduleSet,
-    ScheduleSetupSet,
+    Atom, AtomDataRegistry, BondEntry, BondStore, CommResource, Domain, Neighbor,
+    ParticleSimScheduleSet,
 };
 
 /// `bond_type` value marking an intact bond.
@@ -76,9 +76,9 @@ impl Plugin for BondBasedPlugin {
         // Registers BondStore into the AtomDataRegistry.
         app.add_plugins(soil_core::BondPlugin);
 
-        app.add_setup_system(
+        app.add_update_system(
             build_families.label("peri_build_families"),
-            ScheduleSetupSet::PostSetup,
+            ParticleSimScheduleSet::Neighbor,
         );
         app.add_update_system(bond_based_force, ParticleSimScheduleSet::Force);
     }
@@ -86,72 +86,175 @@ impl Plugin for BondBasedPlugin {
 
 /// Setup system: forms the peridynamic family in the reference configuration.
 ///
-/// For every local point pair within the horizon, pushes a [`BondEntry`] onto
-/// both endpoints (so each point's family is complete) recording the reference
-/// bond length `r₀`, then records each point's initial bond count in
-/// [`PeriAtom::n0`](peri_atom::PeriAtom).
+/// For every local point, scans SOIL's binned neighbour/halo data for points
+/// within the horizon, pushes a [`BondEntry`] addressed by global partner tag,
+/// and records the point's initial bond count in
+/// [`PeriAtom::n0`](peri_atom::PeriAtom). Cross-rank partners are stored only in
+/// the local endpoint's list; the partner rank builds the reciprocal endpoint
+/// from its own halo.
 pub fn build_families(
     atoms: Res<Atom>,
     registry: Res<AtomDataRegistry>,
     table: Res<PeriMaterialTable>,
     domain: Res<Domain>,
+    neighbor: Res<Neighbor>,
     comm: Res<CommResource>,
 ) {
     let mut bond_store = registry.expect_mut::<BondStore>("build_families");
     let mut pd = registry.expect_mut::<PeriAtom>("build_families");
     let nlocal = atoms.nlocal as usize;
 
-    // Idempotent: only build once (setup may be revisited across stages).
-    if bond_store.bonds.iter().take(nlocal).any(|b| !b.is_empty()) {
+    // Idempotent: the reference family is formed once, after SOIL has built the
+    // initial halo and bin data.
+    if pd.n0.iter().take(nlocal).any(|&n| n > 0.0) {
         return;
     }
-    while bond_store.bonds.len() < nlocal {
-        bond_store.bonds.push(Vec::new());
+    if neighbor.bin_start.is_empty() || neighbor.bin_sorted_atoms.is_empty() {
+        return;
     }
 
-    let horizon = table.horizon;
-    let pflags = domain.periodic_flags();
-    let box_size = domain.size;
-    let mut nbonds = 0u64;
-
-    for i in 0..nlocal {
-        for j in (i + 1)..nlocal {
-            let mut d = [
-                atoms.pos[j][0] - atoms.pos[i][0],
-                atoms.pos[j][1] - atoms.pos[i][1],
-                atoms.pos[j][2] - atoms.pos[i][2],
-            ];
-            // Minimum image on periodic axes (reference configuration).
-            for k in 0..3 {
-                if pflags[k] {
-                    d[k] -= box_size[k] * (d[k] / box_size[k]).round();
-                }
-            }
-            let dist = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
-            if dist > 0.0 && dist <= horizon {
-                bond_store.bonds[i].push(BondEntry {
-                    partner_tag: atoms.tag[j],
-                    bond_type: BOND_INTACT,
-                    r0: dist,
-                });
-                bond_store.bonds[j].push(BondEntry {
-                    partner_tag: atoms.tag[i],
-                    bond_type: BOND_INTACT,
-                    r0: dist,
-                });
-                nbonds += 1;
-            }
-        }
-    }
-
-    // Record each point's initial bond count as the damage denominator.
-    for i in 0..nlocal {
-        pd.n0[i] = bond_store.bonds[i].len() as f64;
-    }
+    let nbonds = construct_families_from_neighbor_bins(
+        &atoms,
+        &mut bond_store,
+        &mut pd,
+        &neighbor,
+        &domain,
+        table.horizon,
+    );
 
     let total = comm.all_reduce_sum_f64(nbonds as f64) as u64;
     if comm.rank() == 0 {
-        println!("BondBased: formed {total} peridynamic bonds (reference configuration)");
+        println!("BondBased: formed {total} peridynamic family entries (reference configuration)");
+    }
+}
+
+fn construct_families_from_neighbor_bins(
+    atoms: &Atom,
+    bond_store: &mut BondStore,
+    pd: &mut PeriAtom,
+    neighbor: &Neighbor,
+    domain: &Domain,
+    horizon: f64,
+) -> u64 {
+    let nlocal = atoms.nlocal as usize;
+    let total = atoms.len();
+    bond_store.bonds.clear();
+    bond_store.bonds.resize_with(nlocal, Vec::new);
+
+    let horizon_sq = horizon * horizon;
+    let pflags = domain.periodic_flags();
+    let box_size = domain.size;
+    let mut family_entries = 0u64;
+
+    for i in 0..nlocal {
+        let mut seen: HashSet<u32> = HashSet::new();
+        let my_cell = match neighbor.bin_atom_cell.get(i) {
+            Some(&cell) => cell as usize,
+            None => continue,
+        };
+
+        scan_family_cell(
+            i,
+            my_cell,
+            atoms,
+            bond_store,
+            &mut seen,
+            neighbor,
+            horizon_sq,
+            pflags,
+            box_size,
+            &mut family_entries,
+        );
+
+        for &offset in &neighbor.bin_stencil {
+            if offset == 0 {
+                continue;
+            }
+            let Some(cell) = (my_cell as i32).checked_add(offset) else {
+                continue;
+            };
+            if cell < 0 {
+                continue;
+            }
+            let cell = cell as usize;
+            if cell + 1 >= neighbor.bin_start.len() {
+                continue;
+            }
+            scan_family_cell(
+                i,
+                cell,
+                atoms,
+                bond_store,
+                &mut seen,
+                neighbor,
+                horizon_sq,
+                pflags,
+                box_size,
+                &mut family_entries,
+            );
+        }
+
+        pd.n0[i] = bond_store.bonds[i].len() as f64;
+    }
+
+    debug_assert!(bond_store.bonds.len() >= nlocal);
+    debug_assert!(total >= nlocal);
+    family_entries
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scan_family_cell(
+    i: usize,
+    cell: usize,
+    atoms: &Atom,
+    bond_store: &mut BondStore,
+    seen: &mut HashSet<u32>,
+    neighbor: &Neighbor,
+    horizon_sq: f64,
+    pflags: [bool; 3],
+    box_size: [f64; 3],
+    family_entries: &mut u64,
+) {
+    let Some(&start) = neighbor.bin_start.get(cell) else {
+        return;
+    };
+    let Some(&end) = neighbor.bin_start.get(cell + 1) else {
+        return;
+    };
+
+    let xi = atoms.pos[i];
+    for m in start as usize..end as usize {
+        let Some(&j_u32) = neighbor.bin_sorted_atoms.get(m) else {
+            continue;
+        };
+        let j = j_u32 as usize;
+        if j == i || j >= atoms.len() {
+            continue;
+        }
+        let tag = atoms.tag[j];
+        if !seen.insert(tag) {
+            continue;
+        }
+
+        let mut d = [
+            atoms.pos[j][0] as f64 - xi[0] as f64,
+            atoms.pos[j][1] as f64 - xi[1] as f64,
+            atoms.pos[j][2] as f64 - xi[2] as f64,
+        ];
+        for k in 0..3 {
+            if pflags[k] && box_size[k] > 0.0 {
+                d[k] -= box_size[k] * (d[k] / box_size[k]).round();
+            }
+        }
+        let r2 = d[0].mul_add(d[0], d[1].mul_add(d[1], d[2] * d[2]));
+        if r2 > 0.0 && r2 <= horizon_sq {
+            bond_store.bonds[i].push(BondEntry {
+                partner_tag: tag,
+                bond_type: BOND_INTACT,
+                r0: r2.sqrt(),
+            });
+            *family_entries += 1;
+        }
     }
 }
 
@@ -237,5 +340,101 @@ pub fn bond_based_force(
 
         let n0 = pd.n0[i];
         pd.damage[i] = if n0 > 0.0 { nbroken / n0 } else { 0.0 };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soil_core::BoundaryType;
+
+    fn atom_with_points(points: &[(u32, [f64; 3], bool)]) -> Atom {
+        let mut atoms = Atom::new();
+        atoms.nlocal = points.iter().filter(|(_, _, ghost)| !*ghost).count() as u32;
+        atoms.nghost = points.iter().filter(|(_, _, ghost)| *ghost).count() as u32;
+        atoms.natoms = atoms.nlocal as u64;
+        for &(tag, pos, ghost) in points {
+            atoms.tag.push(tag);
+            atoms.atom_type.push(0);
+            atoms.origin_index.push(if ghost { 0 } else { -1 });
+            atoms.is_ghost.push(ghost);
+            atoms.pos.push(pos);
+            atoms.vel.push([0.0; 3]);
+            atoms.force.push([0.0; 3]);
+            atoms.cutoff_radius.push(0.6);
+            atoms.mass.push(1.0);
+            atoms.inv_mass.push(1.0);
+            atoms.image.push([0, 0, 0]);
+        }
+        atoms
+    }
+
+    fn single_cell_neighbor(n: usize) -> Neighbor {
+        let mut neighbor = Neighbor::new();
+        neighbor.bin_atom_cell = vec![0; n];
+        neighbor.bin_start = vec![0, n as u32];
+        neighbor.bin_sorted_atoms = (0..n as u32).collect();
+        neighbor.bin_stencil.clear();
+        neighbor
+    }
+
+    fn fixed_domain() -> Domain {
+        let mut domain = Domain::new();
+        domain.boundary_type = [BoundaryType::Fixed; 3];
+        domain
+    }
+
+    #[test]
+    fn neighbor_backed_family_includes_each_local_row_and_ghost_tags() {
+        let atoms = atom_with_points(&[
+            (10, [0.0, 0.0, 0.0], false),
+            (20, [0.5, 0.0, 0.0], false),
+            (30, [0.9, 0.0, 0.0], true),
+        ]);
+        let neighbor = single_cell_neighbor(atoms.len());
+        let domain = fixed_domain();
+        let mut store = BondStore::new();
+        let mut pd = PeriAtom {
+            ref_pos: atoms.pos.clone(),
+            volume: vec![1.0; atoms.len()],
+            n0: vec![0.0; atoms.len()],
+            damage: vec![0.0; atoms.len()],
+        };
+
+        let entries = construct_families_from_neighbor_bins(
+            &atoms, &mut store, &mut pd, &neighbor, &domain, 0.6,
+        );
+
+        assert_eq!(entries, 3);
+        assert_eq!(pd.n0[..2], [1.0, 2.0]);
+        assert!(store.has_bond(0, 20));
+        assert!(store.has_bond(1, 10));
+        assert!(store.has_bond(1, 30));
+    }
+
+    #[test]
+    fn neighbor_backed_family_filters_outside_horizon() {
+        let atoms = atom_with_points(&[
+            (10, [0.0, 0.0, 0.0], false),
+            (20, [0.5, 0.0, 0.0], false),
+            (30, [0.7, 0.0, 0.0], false),
+        ]);
+        let neighbor = single_cell_neighbor(atoms.len());
+        let domain = fixed_domain();
+        let mut store = BondStore::new();
+        let mut pd = PeriAtom {
+            ref_pos: atoms.pos.clone(),
+            volume: vec![1.0; atoms.len()],
+            n0: vec![0.0; atoms.len()],
+            damage: vec![0.0; atoms.len()],
+        };
+
+        let entries = construct_families_from_neighbor_bins(
+            &atoms, &mut store, &mut pd, &neighbor, &domain, 0.6,
+        );
+
+        assert_eq!(entries, 4);
+        assert_eq!(pd.n0[..3], [1.0, 2.0, 1.0]);
+        assert!(!store.has_bond(0, 30));
     }
 }
