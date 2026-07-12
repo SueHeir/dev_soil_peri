@@ -436,6 +436,18 @@ mod lattice_tag_tests {
     }
 
     #[test]
+    fn a_rank_partition_preserves_each_lattice_cells_tag() {
+        // A two-rank x split might retain cells 0..4 on rank 0 and 5..9 on
+        // rank 1. Both must retain the tags from the one-rank traversal rather
+        // than renumbering from a local insertion counter.
+        let first = lattice_tag_first(41, 10);
+        let serial: Vec<u32> = (0..10).map(|cell| first + cell).collect();
+        let rank_zero: Vec<u32> = (0..5).map(|cell| first + cell).collect();
+        let rank_one: Vec<u32> = (5..10).map(|cell| first + cell).collect();
+        assert_eq!([rank_zero, rank_one].concat(), serial);
+    }
+
+    #[test]
     #[should_panic(expected = "exceeds u32::MAX")]
     fn lattice_tag_interval_rejects_unaddressable_clouds() {
         lattice_tag_first(u32::MAX - 1, 2);
