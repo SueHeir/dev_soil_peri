@@ -23,3 +23,33 @@ Run the validation from the repository root:
 ```bash
 $BENCH_PYTHON examples/bb_plate_fracture/verify.py
 ```
+
+## Decomposition check
+
+`verify_decomposition.py` first reruns the serial Griffith/Ha--Bobaru validator
+above, then executes the identical fracture input at one and two MPI ranks. The
+two-rank input is made from `config.toml` by changing only the x processor
+count. It compares every full-precision diagnostic row: time, crack-tip lattice
+position, and cracked-point count must be exact; damage and kinetic energy use
+a stated f64 reduction-order envelope (`4096 * epsilon * max(1, |a|, |b|)`).
+
+```bash
+$BENCH_PYTHON examples/bb_plate_fracture/verify_decomposition.py
+```
+
+For a reproducible evidence artifact, use the driver below. It deletes stale
+outputs, reruns the published-reference gate and the MPI comparison, then writes
+the measured rows to `decomposition_report.json` and renders their actual
+error-to-bound ratios. A bar beyond the black pass line is a failure.
+
+```bash
+$BENCH_PYTHON examples/bb_plate_fracture/sweep_decomposition.py
+```
+
+![1-vs-2 rank fracture comparison, generated from fresh validator output](plots/decomposition_invariance.svg)
+
+This is evidence for this fixed, two-way x decomposition only. It does not
+validate arbitrary processor grids, longer runs, other loading modes, or the
+physical model under MPI against a second external experiment. The repository
+disclaimer applies: this check and its automation are AI-authored and require
+independent scientific review before use as a research result.

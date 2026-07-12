@@ -19,8 +19,9 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/SueHeir/dev_soil_peri"
 
 [features]
-default = ["mpi_backend"]
+default = ["mpi_backend", "precision-double"]
 mpi_backend = ["peri_core/mpi_backend", "dep:libffi-sys"]
+precision-double = ["peri_core/precision-double"]
 
 [[example]]
 name = "bb_bar_tension"

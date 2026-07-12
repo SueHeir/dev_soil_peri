@@ -10,8 +10,9 @@ keywords = ["peridynamics", "nonlocal", "simulation", "fracture"]
 categories = ["simulation", "science"]
 
 [features]
-default = ["mpi_backend"]
+default = ["mpi_backend", "precision-double"]
 mpi_backend = ["soil_core/mpi_backend", "peri_atom/mpi_backend", "peri_bond/mpi_backend"]
+precision-double = ["soil_core/precision-double"]
 
 [dependencies]
 grass_scheduler = { git = "https://github.com/SueHeir/grass.git", branch = "main" }

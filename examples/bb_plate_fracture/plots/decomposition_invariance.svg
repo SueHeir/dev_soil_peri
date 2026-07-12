@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="350" viewBox="0 0 760 350">
+<rect width="100%" height="100%" fill="white"/><style>text{font-family:sans-serif;fill:#222}</style>
+<text x="35" y="38" font-size="22" font-weight="bold">dev_soil_peri fracture: 1 vs 2 MPI ranks</text>
+<text x="35" y="65" font-size="15">Fresh Ha--Bobaru/Griffith external-reference gate passed before this comparison.</text>
+<text x="35" y="93" font-size="15">Every one of 31 full-precision rows: time, crack tip, and cracked-point count exact.</text>
+<text x="35" y="145" font-size="16">max |Δ sum damage| / stated f64 reduction bound</text><rect x="35" y="155" width="600" height="28" fill="#eee"/><rect x="35" y="155" width="16.39" height="28" fill="#2878b5"/><line x1="635" y1="145" x2="635" y2="193" stroke="#111" stroke-width="3"/>
+<text x="35" y="230" font-size="16">max |Δ kinetic energy| / stated f64 reduction bound</text><rect x="35" y="240" width="600" height="28" fill="#eee"/><rect x="35" y="240" width="21.03" height="28" fill="#d95f02"/><line x1="635" y1="230" x2="635" y2="278" stroke="#111" stroke-width="3"/>
+<text x="35" y="320" font-size="14">Black line = pass limit (ratio 1); values: 1.307e-11/4.785e-10, 3.188e-14/9.095e-13.</text></svg>

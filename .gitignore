@@ -16,6 +16,8 @@ Cargo.lock
 schedule.dot
 schedule.png
 *.svg
+!examples/bb_plate_fracture/plots/
+!examples/bb_plate_fracture/plots/decomposition_invariance.svg
 **/profile*.json
 **/*.log
 log.lammps

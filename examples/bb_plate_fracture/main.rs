@@ -156,16 +156,15 @@ fn griffith_energy_check(
         return;
     }
     setup.griffith_checked = true;
-    if comm.rank() != 0 {
-        return;
-    }
     let bond_store = registry.expect::<BondStore>("griffith_energy_check");
     let pd = registry.expect::<PeriAtom>("griffith_energy_check");
     let nlocal = atoms.nlocal as usize;
 
-    // tag → index for local points (partners of an interior patch are local).
-    let mut tag_to_index: HashMap<u32, usize> = HashMap::with_capacity(nlocal);
-    for i in 0..nlocal {
+    // Cross-rank families contain halo partners, so the lookup must cover the
+    // complete local-plus-halo store.  Only owned endpoints contribute energy,
+    // preventing double counting after the global reduction below.
+    let mut tag_to_index: HashMap<u32, usize> = HashMap::with_capacity(atoms.len());
+    for i in 0..atoms.len() {
         tag_to_index.insert(atoms.tag[i], i);
     }
 
@@ -207,16 +206,18 @@ fn griffith_energy_check(
             energy += 0.5 * c * s0 * s0 * bond.r0 * vi * vj;
         }
     }
-    let g0_measured = energy / area;
+    let g0_measured = comm.all_reduce_sum_f64(energy) / area;
     let g0_analytic = 9.0 * k * HORIZON * s0 * s0 / 5.0; // inverse of the s0 relation
     let rel_err = (g0_measured - g0_analytic).abs() / g0_analytic;
 
-    println!("Griffith check (crack plane y = {Y_MID:.4} m, delta = {HORIZON:.4} m):");
-    println!("  s0 (from G0 via library)      = {s0:.6e}");
-    println!("  bulk modulus K                = {k:.4e} Pa");
-    println!("  G0_analytic (= 9 K d s0^2 /5) = {g0_analytic:.4} J/m^2");
-    println!("  G0_measured (discrete bonds)  = {g0_measured:.4} J/m^2");
-    println!("  GRIFFITH_REL_ERR              = {rel_err:.4}");
+    if comm.rank() == 0 {
+        println!("Griffith check (crack plane y = {Y_MID:.4} m, delta = {HORIZON:.4} m):");
+        println!("  s0 (from G0 via library)      = {s0:.6e}");
+        println!("  bulk modulus K                = {k:.4e} Pa");
+        println!("  G0_analytic (= 9 K d s0^2 /5) = {g0_analytic:.4} J/m^2");
+        println!("  G0_measured (discrete bonds)  = {g0_measured:.4} J/m^2");
+        println!("  GRIFFITH_REL_ERR              = {rel_err:.4}");
+    }
 }
 
 /// Setup system: carve the mode-I edge pre-notch.
@@ -316,8 +317,13 @@ fn apply_prestrain(
         .and_then(|s| s.parse::<f64>().ok())
         .unwrap_or(PRESTRAIN);
     let pd = registry.expect::<PeriAtom>("apply_prestrain");
-    let nlocal = atoms.nlocal as usize;
-    for i in 0..nlocal {
+    // This system runs after the initial reference-family halo has been built.
+    // Update the halo copies as well as owned points: otherwise the first MPI
+    // force evaluation sees a prestrained owner against an unstrained ghost,
+    // spuriously breaking cross-boundary bonds before the next halo exchange.
+    // The next SOIL communication refreshes ghosts from their owners; this is
+    // only the necessary consistent state for that first force evaluation.
+    for i in 0..atoms.len() {
         let y0 = pd.ref_pos[i][1];
         atoms.pos[i][1] = y0 + eps * (y0 - Y_MID);
         atoms.vel[i] = [0.0; 3];
@@ -386,19 +392,23 @@ fn report(
     let ke = comm.all_reduce_sum_f64(ke);
     let sum_damage = comm.all_reduce_sum_f64(sum_damage);
     let n_crack = comm.all_reduce_sum_f64(n_crack);
+    // SOIL exposes a MIN reduction.  Negating gives the global crack-front
+    // maximum, rather than silently reporting rank zero's local front.
+    let tip_x = -comm.all_reduce_min_f64(-tip_x);
     let time = step as f64 * dt;
 
     if comm.rank() == 0 {
-        // The single-process slice (the supported configuration) owns every
-        // point, so the local `tip_x` is already the global crack tip.
         println!(
-            "CRACKROW step={step} time={time:.6e} tip_x={tip_x:.4} n_crack={n_crack:.0} sum_damage={sum_damage:.2} ke={ke:.3e}"
+            "CRACKROW step={step} time={time:.17e} tip_x={tip_x:.17e} n_crack={n_crack:.0} sum_damage={sum_damage:.17e} ke={ke:.17e}"
         );
     }
 
     // Snapshot the damage field periodically (and at the end) so the crack
     // path's time evolution can be plotted.
-    if step % 500 == 0 || is_last {
+    // A rank-local CSV is not a global fracture field.  Keep the serial
+    // reference artifact, but never let multiple ranks race to overwrite it
+    // or misrepresent rank zero's slice as the decomposed solution.
+    if comm.size() == 1 && (step % 500 == 0 || is_last) {
         dump_crack_field(&atoms, &pd, step, is_last);
     }
 }
