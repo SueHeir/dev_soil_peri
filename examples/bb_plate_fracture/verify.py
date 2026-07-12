@@ -99,7 +99,7 @@ def run(cmd, env=None, **kw):
 
 def build():
     print("building bb_plate_fracture (release, --no-default-features)...")
-    r = run(["cargo", "build", "--release", "--no-default-features",
+    r = run(["cargo", "build", "--release", "--no-default-features", "--features", "precision-double",
              "--example", EXAMPLE])
     if r.returncode != 0:
         print(r.stdout[-2000:]); print(r.stderr[-2000:])
@@ -107,7 +107,7 @@ def build():
 
 
 def run_case(env=None, timeout=900):
-    r = run(["cargo", "run", "--release", "--no-default-features",
+    r = run(["cargo", "run", "--release", "--no-default-features", "--features", "precision-double",
              "--example", EXAMPLE, "--", CONFIG], env=env, timeout=timeout)
     if r.returncode != 0:
         print(r.stdout[-3000:]); print(r.stderr[-2000:])
@@ -127,7 +127,7 @@ def parse_crackrows(out):
     rows = []
     for m in re.finditer(
         r"CRACKROW step=(\d+) time=([\d.eE+-]+) tip_x=([\d.eE+-]+) "
-        r"n_crack=([\d.]+) sum_damage=([\d.]+) ke=([\d.eE+-]+)", out):
+        r"n_crack=(\d+) sum_damage=([\d.eE+-]+) ke=([\d.eE+-]+)", out):
         rows.append(dict(step=int(m.group(1)), t=float(m.group(2)),
                          tip=float(m.group(3)), ncrack=float(m.group(4)),
                          sumd=float(m.group(5)), ke=float(m.group(6))))

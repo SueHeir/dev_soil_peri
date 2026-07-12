@@ -117,7 +117,8 @@ pub mod prelude {
 
     // PD plugins and types.
     pub use peri_atom::{
-        LatticeDef, PeriAtom, PeriAtomPlugin, PeriLatticePlugin, PeriMaterial, PeriMaterialTable, PondConfig,
+        LatticeDef, PeriAtom, PeriAtomPlugin, PeriLatticePlugin, PeriMaterial, PeriMaterialTable,
+        PondConfig,
     };
     pub use peri_bond::{bond_based_force, BondBasedPlugin, BOND_BROKEN, BOND_INTACT};
 
