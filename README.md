@@ -29,6 +29,18 @@ the reference configuration) *is* a SOIL [`BondStore`]. dev_soil_peri therefore 
 SOIL's persistent, tag-addressed, MPI-aware bond storage rather than inventing
 its own.
 
+## Composition boundary
+
+Peridynamic resources and bond semantics belong here; SOIL owns their generic
+particle transport, and GRASS holds the resource instances and schedules the
+plugins. GRASS does not define a material point or bond. If this solver is
+coupled later, the coupling belongs in a separate parent plugin which drives
+the child to exported scheduler seams and exchanges only the public interface
+state. No child-level cross-App `MultiRes` access is required or supported.
+
+This repository currently validates its single-solver, single-process slice. It
+does not yet claim a topology-driven multi-rank coupling example.
+
 ## Layout
 
 `peri_core` is the batteries-included umbrella crate (depend on this):
