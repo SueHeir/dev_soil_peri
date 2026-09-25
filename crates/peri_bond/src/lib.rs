@@ -102,7 +102,7 @@ pub fn build_families(
 ) {
     let mut bond_store = registry.expect_mut::<BondStore>("build_families");
     let mut pd = registry.expect_mut::<PeriAtom>("build_families");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
 
     // Idempotent: the reference family is formed once, after SOIL has built the
     // initial halo and bin data.
@@ -136,7 +136,7 @@ fn construct_families_from_neighbor_bins(
     domain: &Domain,
     horizon: f64,
 ) -> u64 {
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     let total = atoms.len();
     bond_store.bonds.clear();
     bond_store.bonds.resize_with(nlocal, Vec::new);
@@ -241,11 +241,7 @@ fn scan_family_cell(
             atoms.pos[j][1] as f64 - xi[1] as f64,
             atoms.pos[j][2] as f64 - xi[2] as f64,
         ];
-        for k in 0..3 {
-            if pflags[k] && box_size[k] > 0.0 {
-                d[k] -= box_size[k] * (d[k] / box_size[k]).round();
-            }
-        }
+        minimum_image(&mut d, pflags, box_size);
         let r2 = d[0].mul_add(d[0], d[1].mul_add(d[1], d[2] * d[2]));
         if r2 > 0.0 && r2 <= horizon_sq {
             bond_store.bonds[i].push(BondEntry {
@@ -264,11 +260,38 @@ pub fn bond_based_force(
     mut atoms: ResMut<Atom>,
     registry: Res<AtomDataRegistry>,
     table: Res<PeriMaterialTable>,
+    domain: Res<Domain>,
 ) {
     let mut bond_store = registry.expect_mut::<BondStore>("bond_based_force");
     let mut pd = registry.expect_mut::<PeriAtom>("bond_based_force");
+    accumulate_bond_forces(&mut atoms, &mut bond_store, &mut pd, &table, &domain);
+}
 
-    let nlocal = atoms.nlocal as usize;
+/// Applies the minimum-image convention to `d` on every periodic axis, so a
+/// separation vector never spans more than half the periodic box.
+#[inline]
+fn minimum_image(d: &mut [f64; 3], pflags: [bool; 3], box_size: [f64; 3]) {
+    for k in 0..3 {
+        if pflags[k] && box_size[k] > 0.0 {
+            d[k] -= box_size[k] * (d[k] / box_size[k]).round();
+        }
+    }
+}
+
+/// Bond-based PD force kernel over every local point. Bond partners are found
+/// by tag, so the resolved row may be a periodic image on the far side of the
+/// box; the bond vector is therefore reduced by the minimum-image convention.
+fn accumulate_bond_forces(
+    atoms: &mut Atom,
+    bond_store: &mut BondStore,
+    pd: &mut PeriAtom,
+    table: &PeriMaterialTable,
+    domain: &Domain,
+) {
+    let pflags = domain.periodic_flags();
+    let box_size = domain.size;
+
+    let nlocal = atoms.nlocal() as usize;
     let ntotal = atoms.len();
     if bond_store.bonds.len() < nlocal {
         return;
@@ -309,9 +332,13 @@ pub fn bond_based_force(
                 None => continue, // partner not currently present
             };
 
-            let dx = atoms.pos[j][0] - xi[0];
-            let dy = atoms.pos[j][1] - xi[1];
-            let dz = atoms.pos[j][2] - xi[2];
+            let mut d = [
+                atoms.pos[j][0] as f64 - xi[0] as f64,
+                atoms.pos[j][1] as f64 - xi[1] as f64,
+                atoms.pos[j][2] as f64 - xi[2] as f64,
+            ];
+            minimum_image(&mut d, pflags, box_size);
+            let [dx, dy, dz] = d;
             let ylen = (dx * dx + dy * dy + dz * dz).sqrt();
             if ylen == 0.0 {
                 continue;
@@ -346,26 +373,39 @@ pub fn bond_based_force(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soil_core::BoundaryType;
+    use soil_core::{BoundaryType, ParticleStore};
 
+    /// Build a core-only (extension-free) fixture. Rows are appended through
+    /// `ParticleStore` against an empty registry; ghost rows must form the
+    /// suffix, and the ownership partition is then set explicitly, which SOIL
+    /// permits only for extension-free fixtures.
     fn atom_with_points(points: &[(u32, [f64; 3], bool)]) -> Atom {
+        let nlocal = points.iter().filter(|(_, _, ghost)| !*ghost).count();
+        let nghost = points.len() - nlocal;
+        assert!(
+            points[..nlocal].iter().all(|(_, _, ghost)| !*ghost),
+            "fixture ghost rows must follow every local row"
+        );
         let mut atoms = Atom::new();
-        atoms.nlocal = points.iter().filter(|(_, _, ghost)| !*ghost).count() as u32;
-        atoms.nghost = points.iter().filter(|(_, _, ghost)| *ghost).count() as u32;
-        atoms.natoms = atoms.nlocal as u64;
-        for &(tag, pos, ghost) in points {
-            atoms.tag.push(tag);
-            atoms.atom_type.push(0);
-            atoms.origin_index.push(if ghost { 0 } else { -1 });
-            atoms.is_ghost.push(ghost);
-            atoms.pos.push(pos);
-            atoms.vel.push([0.0; 3]);
-            atoms.force.push([0.0; 3]);
-            atoms.cutoff_radius.push(0.6);
-            atoms.mass.push(1.0);
-            atoms.inv_mass.push(1.0);
-            atoms.image.push([0, 0, 0]);
+        let registry = AtomDataRegistry::default();
+        for (n, &(tag, pos, ghost)) in points.iter().enumerate() {
+            ParticleStore::new(&mut atoms, &registry)
+                .push_default_local(n as u64 + 1)
+                .expect("extension-free fixture accepts insertion");
+            atoms.tag[n] = tag;
+            atoms.atom_type[n] = 0;
+            atoms.origin_index[n] = if ghost { 0 } else { -1 };
+            atoms.is_ghost[n] = ghost;
+            atoms.pos[n] = pos;
+            atoms.vel[n] = [0.0; 3];
+            atoms.force[n] = [0.0; 3];
+            atoms.cutoff_radius[n] = 0.6;
+            atoms.mass[n] = 1.0;
+            atoms.inv_mass[n] = 1.0;
+            atoms.image[n] = [0, 0, 0];
         }
+        // SAFETY: no extension is registered and `nlocal + nghost == len`.
+        unsafe { atoms.set_layout_unchecked(nlocal as u32, nghost as u32, nlocal as u64) };
         atoms
     }
 
@@ -395,7 +435,7 @@ mod tests {
         let domain = fixed_domain();
         let mut store = BondStore::new();
         let mut pd = PeriAtom {
-            ref_pos: atoms.pos.clone(),
+            ref_pos: atoms.pos.to_vec(),
             volume: vec![1.0; atoms.len()],
             n0: vec![0.0; atoms.len()],
             damage: vec![0.0; atoms.len()],
@@ -423,7 +463,7 @@ mod tests {
         let domain = fixed_domain();
         let mut store = BondStore::new();
         let mut pd = PeriAtom {
-            ref_pos: atoms.pos.clone(),
+            ref_pos: atoms.pos.to_vec(),
             volume: vec![1.0; atoms.len()],
             n0: vec![0.0; atoms.len()],
             damage: vec![0.0; atoms.len()],
@@ -436,5 +476,80 @@ mod tests {
         assert_eq!(entries, 4);
         assert_eq!(pd.n0[..3], [1.0, 2.0, 1.0]);
         assert!(!store.has_bond(0, 30));
+    }
+
+    fn one_material_table(critical_stretch: f64) -> PeriMaterialTable {
+        PeriMaterialTable {
+            horizon: 0.6,
+            materials: vec![peri_atom::PeriMaterial {
+                name: "m".to_string(),
+                density: 1.0,
+                youngs_mod: 1.0,
+                bulk_modulus: 1.0,
+                micromodulus: 1.0,
+                critical_stretch,
+            }],
+        }
+    }
+
+    #[test]
+    fn bond_across_periodic_boundary_is_not_stretched_or_broken() {
+        // Box [0, 1) periodic in x. Points at x = 0.05 and x = 0.95 are 0.1
+        // apart through the boundary. The partner resolved by tag sits at its
+        // unwrapped coordinate 0.95, so the raw difference spans the box.
+        let atoms_ref =
+            atom_with_points(&[(1, [0.05, 0.5, 0.5], false), (2, [0.95, 0.5, 0.5], false)]);
+        let neighbor = single_cell_neighbor(atoms_ref.len());
+        let mut domain = Domain::new();
+        domain.boundary_type = [
+            BoundaryType::Periodic,
+            BoundaryType::Fixed,
+            BoundaryType::Fixed,
+        ];
+        let mut store = BondStore::new();
+        let mut pd = PeriAtom {
+            ref_pos: atoms_ref.pos.to_vec(),
+            volume: vec![1.0; atoms_ref.len()],
+            n0: vec![0.0; atoms_ref.len()],
+            damage: vec![0.0; atoms_ref.len()],
+        };
+        let entries = construct_families_from_neighbor_bins(
+            &atoms_ref, &mut store, &mut pd, &neighbor, &domain, 0.6,
+        );
+        assert_eq!(entries, 2);
+        let r0 = store.bonds[0][0].r0;
+        assert!(
+            (r0 - 0.1).abs() < 1e-12,
+            "reference bond uses minimum image"
+        );
+
+        // Undeformed: the minimum-image bond length equals r0, so there is
+        // zero stretch, zero force, and no breakage (s0 is far below the
+        // spurious raw stretch (0.9 - 0.1) / 0.1 = 8).
+        let mut atoms =
+            atom_with_points(&[(1, [0.05, 0.5, 0.5], false), (2, [0.95, 0.5, 0.5], false)]);
+        let table = one_material_table(0.01);
+        accumulate_bond_forces(&mut atoms, &mut store, &mut pd, &table, &domain);
+        for i in 0..2 {
+            assert_eq!(store.bonds[i][0].bond_type, BOND_INTACT);
+            assert_eq!(pd.damage[i], 0.0);
+            for k in 0..3 {
+                assert!(
+                    atoms.force[i][k].abs() < 1e-12,
+                    "force {:?}",
+                    atoms.force[i]
+                );
+            }
+        }
+
+        // A small stretch (s = 0.005 < s0) across the boundary pulls the points back together
+        // through the boundary: point 1 is pulled toward -x, point 2 toward +x.
+        let mut atoms =
+            atom_with_points(&[(1, [0.0505, 0.5, 0.5], false), (2, [0.95, 0.5, 0.5], false)]);
+        accumulate_bond_forces(&mut atoms, &mut store, &mut pd, &table, &domain);
+        assert_eq!(store.bonds[0][0].bond_type, BOND_INTACT);
+        assert!(atoms.force[0][0] < 0.0);
+        assert!(atoms.force[1][0] > 0.0);
+        assert!((atoms.force[0][0] + atoms.force[1][0]).abs() < 1e-12);
     }
 }

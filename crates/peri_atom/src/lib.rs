@@ -44,7 +44,8 @@ use serde::Deserialize;
 use soil_derive::AtomData; // derive macro (the trait of the same name comes from soil_core)
 
 use soil_core::{
-    register_atom_data, Atom, AtomData, AtomPlugin, CommResource, Config, Domain, ScheduleSetupSet,
+    register_atom_data, Atom, AtomData, AtomPlugin, CommResource, Config, Domain, ParticleStore,
+    ScheduleSetupSet,
 };
 
 /// Poisson's ratio is fixed at ¼ in the bond-based peridynamic model.
@@ -326,7 +327,6 @@ fn peri_lattice_insert(
     };
 
     let horizon = table.horizon;
-    let mut pd = registry.expect_mut::<PeriAtom>("peri_lattice_insert");
 
     // Tags are a function of the declarative lattice cell, not of the local
     // insertion count. Every rank iterates the same lattice, then retains only
@@ -391,26 +391,38 @@ fn peri_lattice_insert(
                         continue;
                     }
 
+                    // Structural insertion goes through `ParticleStore`, which
+                    // appends an aligned default row to the core SoA and every
+                    // registered extension (including `PeriAtom`) together.
+                    let global_natoms = atoms
+                        .natoms()
+                        .checked_add(1)
+                        .expect("global particle count overflow during lattice insertion");
+                    ParticleStore::new(&mut atoms, &registry)
+                        .push_default_local(global_natoms)
+                        .expect("registered PD rows must accept transactional insertion");
+                    let i = atoms.len() - 1;
+
                     // Base SOIL atom columns.
-                    atoms.natoms += 1;
-                    atoms.nlocal += 1;
-                    atoms.tag.push(tag);
-                    atoms.origin_index.push(0);
-                    atoms.cutoff_radius.push(horizon);
-                    atoms.image.push([0, 0, 0]);
-                    atoms.is_ghost.push(false);
-                    atoms.pos.push(pos);
-                    atoms.vel.push(vel);
-                    atoms.force.push([0.0; 3]);
-                    atoms.mass.push(mass);
-                    atoms.inv_mass.push(inv_mass);
-                    atoms.atom_type.push(mat_idx as u32);
+                    atoms.tag[i] = tag;
+                    atoms.origin_index[i] = 0;
+                    atoms.cutoff_radius[i] = horizon;
+                    atoms.image[i] = [0, 0, 0];
+                    atoms.is_ghost[i] = false;
+                    atoms.pos[i] = pos;
+                    atoms.vel[i] = vel;
+                    atoms.force[i] = [0.0; 3];
+                    atoms.mass[i] = mass;
+                    atoms.inv_mass[i] = inv_mass;
+                    atoms.atom_type[i] = mat_idx as u32;
 
                     // PD columns. `n0` is filled when the family is built.
-                    pd.ref_pos.push(pos);
-                    pd.volume.push(volume);
-                    pd.n0.push(0.0);
-                    pd.damage.push(0.0);
+                    let mut pd = registry.expect_mut::<PeriAtom>("peri_lattice_insert");
+                    pd.ref_pos[i] = pos;
+                    pd.volume[i] = volume;
+                    pd.n0[i] = 0.0;
+                    pd.damage[i] = 0.0;
+                    drop(pd);
 
                     placed += 1;
                 }
