@@ -158,7 +158,7 @@ fn griffith_energy_check(
     setup.griffith_checked = true;
     let bond_store = registry.expect::<BondStore>("griffith_energy_check");
     let pd = registry.expect::<PeriAtom>("griffith_energy_check");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
 
     // Cross-rank families contain halo partners, so the lookup must cover the
     // complete local-plus-halo store.  Only owned endpoints contribute energy,
@@ -238,7 +238,7 @@ fn introduce_notch(
     setup.notch_done = true;
     let mut bond_store = registry.expect_mut::<BondStore>("introduce_notch");
     let mut pd = registry.expect_mut::<PeriAtom>("introduce_notch");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     let ntotal = atoms.len();
 
     let mut tag_to_index: HashMap<u32, usize> = HashMap::with_capacity(ntotal);
@@ -338,7 +338,7 @@ fn apply_prestrain(
 /// stretch is maintained while the interior fractures freely.
 fn hold_grips(mut atoms: ResMut<Atom>, registry: Res<AtomDataRegistry>) {
     let pd = registry.expect::<PeriAtom>("hold_grips");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     for i in 0..nlocal {
         let y0 = pd.ref_pos[i][1];
         if y0 > PLATE_Y_MAX - GRIP || y0 < GRIP {
@@ -372,7 +372,7 @@ fn report(
     }
 
     let pd = registry.expect::<PeriAtom>("report");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
 
     let mut tip_x = 0.0f64;
     let mut n_crack = 0.0f64; // points on the plane above CRACK_DAMAGE
@@ -430,7 +430,7 @@ fn dump_crack_field(atoms: &Atom, pd: &PeriAtom, step: usize, is_last: bool) {
         }
     };
     let _ = writeln!(f, "x,y,damage");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     for i in 0..nlocal {
         let p = pd.ref_pos[i];
         if (p[2] - z_mid).abs() < 0.75 * DX {
