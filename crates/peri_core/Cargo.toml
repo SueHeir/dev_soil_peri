@@ -18,12 +18,12 @@ precision-double = ["soil_core/precision-double"]
 grass_scheduler = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
 grass_app = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
 grass_derive = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
-soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj", default-features = false }
-soil_verlet = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj" }
-soil_print = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj" }
-soil_derive = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj" }
-soil_deform = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj" }
-soil_fixes = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj" }
-soil_plugins = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj" }
+soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "main", default-features = false }
+soil_verlet = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
+soil_print = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
+soil_derive = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
+soil_deform = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
+soil_fixes = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
+soil_plugins = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
 peri_atom = { path = "../peri_atom", version = "0.1.0" }
 peri_bond = { path = "../peri_bond", version = "0.1.0" }

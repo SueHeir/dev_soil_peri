@@ -10,7 +10,7 @@ keywords = ["peridynamics", "bond-based", "fracture", "simulation"]
 categories = ["simulation", "science"]
 
 [dependencies]
-soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj", default-features = false }
+soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "main", default-features = false }
 grass_app = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
 grass_scheduler = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
 peri_atom = { path = "../peri_atom", version = "0.1.0" }

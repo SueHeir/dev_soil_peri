@@ -49,6 +49,9 @@ bin_size = 0.0032
 # the result.
 every = 0
 check = true
+# Bins only, no pair list: peridynamics reads SOIL's bins once to build the
+# reference family and never iterates neighbor pairs.
+pairs = false
 
 [dev_soil_peri]
 horizon = 0.003           # delta = 3 * spacing
