@@ -10,10 +10,10 @@ keywords = ["peridynamics", "atom", "material", "simulation"]
 categories = ["simulation", "science"]
 
 [dependencies]
-soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "main", default-features = false }
+soil_core = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj", default-features = false }
 grass_app = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
 grass_scheduler = { git = "https://github.com/SueHeir/grass.git", branch = "main" }
-soil_derive = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
+soil_derive = { git = "https://github.com/SueHeir/soil.git", branch = "claude/project-thread-6guszj" }
 serde = { version = "1", features = ["derive"] }
 
 [features]
