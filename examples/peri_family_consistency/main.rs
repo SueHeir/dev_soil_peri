@@ -53,7 +53,7 @@ fn audit_family(
 
     let mut bond_store = registry.expect_mut::<BondStore>("audit_family");
     let mut pd = registry.expect_mut::<PeriAtom>("audit_family");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     let ntotal = atoms.len();
 
     let mut tag_to_index: HashMap<u32, usize> = HashMap::with_capacity(ntotal);

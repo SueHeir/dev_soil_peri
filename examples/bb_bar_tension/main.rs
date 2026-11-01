@@ -51,7 +51,7 @@ fn set_timestep(mut atoms: ResMut<Atom>, run_config: Res<RunConfig>) {
 /// the bond force during the final integration half-step.
 fn apply_grips(mut atoms: ResMut<Atom>, registry: Res<AtomDataRegistry>) {
     let pd = registry.expect::<PeriAtom>("apply_grips");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     for i in 0..nlocal {
         let x0 = pd.ref_pos[i][0];
         if x0 < BAR_X_MIN + GRIP {
@@ -77,7 +77,7 @@ fn report(
     }
 
     let pd = registry.expect::<PeriAtom>("report");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     let mut ke = 0.0f64;
     let mut dmax = 0.0f64;
     let mut nbroken = 0.0f64;

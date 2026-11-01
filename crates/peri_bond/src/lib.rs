@@ -102,7 +102,7 @@ pub fn build_families(
 ) {
     let mut bond_store = registry.expect_mut::<BondStore>("build_families");
     let mut pd = registry.expect_mut::<PeriAtom>("build_families");
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
 
     // Idempotent: the reference family is formed once, after SOIL has built the
     // initial halo and bin data.
@@ -136,7 +136,7 @@ fn construct_families_from_neighbor_bins(
     domain: &Domain,
     horizon: f64,
 ) -> u64 {
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     let total = atoms.len();
     bond_store.bonds.clear();
     bond_store.bonds.resize_with(nlocal, Vec::new);
@@ -268,7 +268,7 @@ pub fn bond_based_force(
     let mut bond_store = registry.expect_mut::<BondStore>("bond_based_force");
     let mut pd = registry.expect_mut::<PeriAtom>("bond_based_force");
 
-    let nlocal = atoms.nlocal as usize;
+    let nlocal = atoms.nlocal() as usize;
     let ntotal = atoms.len();
     if bond_store.bonds.len() < nlocal {
         return;
@@ -350,22 +350,17 @@ mod tests {
 
     fn atom_with_points(points: &[(u32, [f64; 3], bool)]) -> Atom {
         let mut atoms = Atom::new();
-        atoms.nlocal = points.iter().filter(|(_, _, ghost)| !*ghost).count() as u32;
-        atoms.nghost = points.iter().filter(|(_, _, ghost)| *ghost).count() as u32;
-        atoms.natoms = atoms.nlocal as u64;
-        for &(tag, pos, ghost) in points {
-            atoms.tag.push(tag);
-            atoms.atom_type.push(0);
-            atoms.origin_index.push(if ghost { 0 } else { -1 });
-            atoms.is_ghost.push(ghost);
-            atoms.pos.push(pos);
-            atoms.vel.push([0.0; 3]);
-            atoms.force.push([0.0; 3]);
-            atoms.cutoff_radius.push(0.6);
-            atoms.mass.push(1.0);
-            atoms.inv_mass.push(1.0);
-            atoms.image.push([0, 0, 0]);
+        for (i, &(tag, pos, ghost)) in points.iter().enumerate() {
+            // SAFETY: core-only fixture with no registered extensions; the
+            // ownership partition is set below.
+            unsafe { atoms.push_test_atom(tag, pos, 0.6, 1.0) };
+            atoms.origin_index[i] = if ghost { 0 } else { -1 };
+            atoms.is_ghost[i] = ghost;
         }
+        let nlocal = points.iter().filter(|(_, _, ghost)| !*ghost).count() as u32;
+        let nghost = points.len() as u32 - nlocal;
+        // SAFETY: no extensions are registered and rows are ordered as given.
+        unsafe { atoms.set_layout_unchecked(nlocal, nghost, nlocal as u64) };
         atoms
     }
 
@@ -395,7 +390,7 @@ mod tests {
         let domain = fixed_domain();
         let mut store = BondStore::new();
         let mut pd = PeriAtom {
-            ref_pos: atoms.pos.clone(),
+            ref_pos: atoms.pos.to_vec(),
             volume: vec![1.0; atoms.len()],
             n0: vec![0.0; atoms.len()],
             damage: vec![0.0; atoms.len()],
@@ -423,7 +418,7 @@ mod tests {
         let domain = fixed_domain();
         let mut store = BondStore::new();
         let mut pd = PeriAtom {
-            ref_pos: atoms.pos.clone(),
+            ref_pos: atoms.pos.to_vec(),
             volume: vec![1.0; atoms.len()],
             n0: vec![0.0; atoms.len()],
             damage: vec![0.0; atoms.len()],
