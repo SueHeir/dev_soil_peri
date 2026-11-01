@@ -26,7 +26,15 @@ boundary_z = "fixed"
 # size must be at least the horizon.
 skin_fraction = 1.1
 bin_size = 0.0016
-every = 1
+# Rebuild on displacement only (SOIL default). Peridynamic bonds live in the
+# BondStore, not the pair list, so the list only has to keep ghosts covering
+# each horizon; rebuilding every step cost ~4x the run time for no change in
+# the result.
+every = 0
+check = true
+# Bins only, no pair list: peridynamics reads SOIL's bins once to build the
+# reference family and never iterates neighbor pairs.
+pairs = false
 
 [dev_soil_peri]
 horizon = 0.0015          # δ = 3 · spacing

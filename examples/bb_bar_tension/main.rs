@@ -24,9 +24,6 @@ fn main() {
     app.add_plugins(CorePlugins)
         .add_plugins(BondBasedDefaultPlugins);
 
-    // Apply the configured timestep to the integrator.
-    app.add_setup_system(set_timestep, ScheduleSetupSet::PostSetup);
-
     // Prescribe grip kinematics after the bond force is computed and before the
     // final velocity update, so the grips move at exactly the imposed velocity.
     app.add_update_system(apply_grips, ParticleSimScheduleSet::PostForce);
@@ -35,15 +32,6 @@ fn main() {
     app.add_update_system(report, ParticleSimScheduleSet::PostFinalIntegration);
 
     app.start();
-}
-
-/// Copy the `[run] dt` into `Atom::dt` (the integrator reads `Atom::dt`, which
-/// otherwise defaults to 1.0).
-fn set_timestep(mut atoms: ResMut<Atom>, run_config: Res<RunConfig>) {
-    let dt = run_config.current_stage(0).dt;
-    if dt > 0.0 {
-        atoms.dt = dt;
-    }
 }
 
 /// Hold the left grip fixed and pull the right grip at constant velocity. Both

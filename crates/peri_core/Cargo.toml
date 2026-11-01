@@ -24,5 +24,6 @@ soil_print = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
 soil_derive = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
 soil_deform = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
 soil_fixes = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
+soil_plugins = { git = "https://github.com/SueHeir/soil.git", branch = "main" }
 peri_atom = { path = "../peri_atom", version = "0.1.0" }
 peri_bond = { path = "../peri_bond", version = "0.1.0" }

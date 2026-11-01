@@ -59,36 +59,11 @@ pub use soil_print;
 
 use grass_app::prelude::*;
 
-/// Core simulation infrastructure plugin group.
-///
-/// Includes, in registration order:
-/// - [`InputPlugin`](soil_core::InputPlugin) — CLI parsing and TOML config loading
-/// - [`CommunicationPlugin`](soil_core::CommunicationPlugin) — MPI / single-process backend
-/// - [`DomainPlugin`](soil_core::DomainPlugin) — domain decomposition, PBC, shrink-wrap
-/// - [`NeighborPlugin`](soil_core::NeighborPlugin) — bin-based neighbour lists
-/// - [`GroupPlugin`](soil_core::GroupPlugin) — atom group definitions
-/// - [`RunPlugin`](soil_core::RunPlugin) — run / cycle management
-/// - [`PrintPlugin`](soil_print::PrintPlugin) — thermo, dump, restart output
-///
-/// Integration is **not** included here — use
-/// [`BondBasedDefaultPlugins`], which adds velocity-Verlet automatically.
-pub struct CorePlugins;
-
-impl PluginGroup for CorePlugins {
-    fn build(self) -> PluginGroupBuilder {
-        PluginGroupBuilder::start::<Self>()
-            .add(|app: &mut App| {
-                app.set_warning_fn(soil_core::verlet_schedule_warnings);
-            })
-            .add(soil_core::InputPlugin)
-            .add(soil_core::CommunicationPlugin)
-            .add(soil_core::DomainPlugin)
-            .add(soil_core::NeighborPlugin)
-            .add(soil_core::GroupPlugin)
-            .add(soil_core::RunPlugin)
-            .add(soil_print::PrintPlugin)
-    }
-}
+/// Core simulation infrastructure plugin group — SOIL's shared
+/// [`soil_plugins::CorePlugins`], the same group DIRT and dev_soil_sph use.
+/// Integration is **not** included; [`BondBasedDefaultPlugins`] adds
+/// velocity-Verlet, which also applies `[[run]] dt`.
+pub use soil_plugins::CorePlugins;
 
 /// Bond-based peridynamics plugin group.
 ///
@@ -124,7 +99,7 @@ pub mod prelude {
 
     // Shared infrastructure.
     pub use soil_deform::{DeformConfig, DeformPlugin, DeformState};
-    pub use soil_fixes::{PinDef, PinRegistry, PinState, SoilFixesPlugin};
+    pub use soil_fixes::{GravityConfig, GravityPlugin, PinDef, PinRegistry, PinState, SoilFixesPlugin};
 
     // Derive macros.
     pub use grass_derive::{ScheduleSet, StageEnum};

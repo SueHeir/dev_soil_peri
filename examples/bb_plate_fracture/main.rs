@@ -83,8 +83,6 @@ fn main() {
         .add_plugins(BondBasedDefaultPlugins);
     app.add_resource(ReferenceSetupState::default());
 
-    app.add_setup_system(set_timestep, ScheduleSetupSet::PostSetup);
-
     // Griffith energy check on the *intact* reference family, then carve the
     // pre-notch after SOIL has built the initial neighbour/halo data and the
     // peridynamic family. These one-shot systems run in the neighbour stage so
@@ -117,14 +115,6 @@ fn main() {
     app.add_update_system(report, ParticleSimScheduleSet::PostFinalIntegration);
 
     app.start();
-}
-
-/// Copy the `[run] dt` into `Atom::dt` (the integrator reads `Atom::dt`).
-fn set_timestep(mut atoms: ResMut<Atom>, run_config: Res<RunConfig>) {
-    let dt = run_config.current_stage(0).dt;
-    if dt > 0.0 {
-        atoms.dt = dt;
-    }
 }
 
 /// Setup system: independent discrete evaluation of the fracture energy.

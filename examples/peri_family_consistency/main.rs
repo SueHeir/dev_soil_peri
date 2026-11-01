@@ -23,7 +23,6 @@ fn main() {
     app.add_plugins(CorePlugins)
         .add_plugins(BondBasedDefaultPlugins);
     app.add_resource(FamilyAuditState::default());
-    app.add_setup_system(set_timestep, ScheduleSetupSet::PostSetup);
     app.add_update_system(
         audit_family
             .after("peri_build_families")
@@ -31,13 +30,6 @@ fn main() {
         ParticleSimScheduleSet::Neighbor,
     );
     app.start();
-}
-
-fn set_timestep(mut atoms: ResMut<Atom>, run_config: Res<RunConfig>) {
-    let dt = run_config.current_stage(0).dt;
-    if dt > 0.0 {
-        atoms.dt = dt;
-    }
 }
 
 fn audit_family(

@@ -43,7 +43,7 @@
 //! bonds can cross MPI rank boundaries while the [`BondStore`] still migrates
 //! and restarts with the owning atom.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use grass_app::prelude::*;
 use grass_scheduler::prelude::*;
@@ -51,7 +51,7 @@ use grass_scheduler::prelude::*;
 use peri_atom::{PeriAtom, PeriMaterialTable};
 use soil_core::{
     Atom, AtomDataRegistry, BondEntry, BondStore, CommResource, Domain, Neighbor,
-    ParticleSimScheduleSet,
+    ParticleSimScheduleSet, TagIndex,
 };
 
 /// `bond_type` value marking an intact bond.
@@ -260,30 +260,46 @@ fn scan_family_cell(
 
 /// Force system: accumulates the bond-based PD force on every local point and
 /// updates its damage, breaking bonds that exceed the critical stretch.
+///
+/// Partners are resolved through SOIL's shared [`TagIndex`], which is rebuilt
+/// only when the neighbor list is (local rows and ghosts are stable in
+/// between), and every bond vector goes through
+/// [`Domain::minimum_image`]: on a periodic axis a partner tag is present both
+/// as an owned point and as a ghost image, and the copy the lookup lands on is
+/// not necessarily the near one.
 pub fn bond_based_force(
     mut atoms: ResMut<Atom>,
     registry: Res<AtomDataRegistry>,
     table: Res<PeriMaterialTable>,
+    neighbor: Res<Neighbor>,
+    domain: Res<Domain>,
+    mut tags: ResMut<TagIndex>,
 ) {
     let mut bond_store = registry.expect_mut::<BondStore>("bond_based_force");
     let mut pd = registry.expect_mut::<PeriAtom>("bond_based_force");
 
     let nlocal = atoms.nlocal() as usize;
-    let ntotal = atoms.len();
     if bond_store.bonds.len() < nlocal {
         return;
     }
+    tags.refresh(&atoms, &neighbor);
+    accumulate_bond_forces(&mut atoms, &mut bond_store, &mut pd, &table, &domain, &tags);
+}
 
-    // tag → current index (locals + ghosts), so a bond partner that is currently
-    // a ghost still resolves to its position and volume.
-    let mut tag_to_index: HashMap<u32, usize> = HashMap::with_capacity(ntotal);
-    for idx in 0..ntotal {
-        tag_to_index.insert(atoms.tag[idx], idx);
-    }
+fn accumulate_bond_forces(
+    atoms: &mut Atom,
+    bond_store: &mut BondStore,
+    pd: &mut PeriAtom,
+    table: &PeriMaterialTable,
+    domain: &Domain,
+    tags: &TagIndex,
+) {
+    let nlocal = atoms.nlocal() as usize;
+    let periodic = domain.periodic_flags().iter().any(|&p| p);
 
     for i in 0..nlocal {
-        let n_bonds = bond_store.bonds[i].len();
-        if n_bonds == 0 {
+        let bonds = &mut bond_store.bonds[i];
+        if bonds.is_empty() {
             continue;
         }
         let vi = pd.volume[i];
@@ -293,45 +309,43 @@ pub fn bond_based_force(
         let mut f = [0.0f64; 3];
         let mut nbroken = 0.0f64;
 
-        for k in 0..n_bonds {
-            // Read the bond fields by value (BondEntry is not Copy); the
-            // mutable borrow for breakage happens later via direct indexing.
-            let bond = &bond_store.bonds[i][k];
+        for bond in bonds.iter_mut() {
             if bond.bond_type == BOND_BROKEN {
                 nbroken += 1.0;
                 continue;
             }
-            let partner_tag = bond.partner_tag;
-            let r0 = bond.r0;
-
-            let j = match tag_to_index.get(&partner_tag) {
-                Some(&j) => j,
-                None => continue, // partner not currently present
+            let Some(j) = tags.get(bond.partner_tag) else {
+                continue; // partner not currently present
             };
 
-            let dx = atoms.pos[j][0] - xi[0];
-            let dy = atoms.pos[j][1] - xi[1];
-            let dz = atoms.pos[j][2] - xi[2];
-            let ylen = (dx * dx + dy * dy + dz * dz).sqrt();
+            let mut d = [
+                atoms.pos[j][0] - xi[0],
+                atoms.pos[j][1] - xi[1],
+                atoms.pos[j][2] - xi[2],
+            ];
+            if periodic {
+                d = domain.minimum_image(d);
+            }
+            let ylen = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
             if ylen == 0.0 {
                 continue;
             }
+            let r0 = bond.r0;
             let s = (ylen - r0) / r0;
 
             let tj = atoms.atom_type[j] as usize;
             if s > table.critical_stretch_ij(ti, tj) {
-                bond_store.bonds[i][k].bond_type = BOND_BROKEN;
+                bond.bond_type = BOND_BROKEN;
                 nbroken += 1.0;
                 continue;
             }
 
             // F_i contribution = c · s · ŷ · V_i · V_j.
             let c = table.micromodulus_ij(ti, tj);
-            let vj = pd.volume[j];
-            let coeff = c * s * vi * vj / ylen;
-            f[0] += coeff * dx;
-            f[1] += coeff * dy;
-            f[2] += coeff * dz;
+            let coeff = c * s * vi * pd.volume[j] / ylen;
+            f[0] += coeff * d[0];
+            f[1] += coeff * d[1];
+            f[2] += coeff * d[2];
         }
 
         atoms.force[i][0] += f[0];
@@ -377,6 +391,102 @@ mod tests {
         let mut domain = Domain::new();
         domain.boundary_type = [BoundaryType::Fixed; 3];
         domain
+    }
+
+    fn unit_table() -> PeriMaterialTable {
+        PeriMaterialTable {
+            horizon: 0.2,
+            materials: vec![peri_atom::PeriMaterial {
+                name: "m".into(),
+                density: 1.0,
+                youngs_mod: 1.0,
+                bulk_modulus: 1.0,
+                micromodulus: 1.0,
+                critical_stretch: 0.01,
+            }],
+        }
+    }
+
+    #[test]
+    fn periodic_interior_bond_ignores_the_far_ghost_image() {
+        // Tag 20 is owned at x = 0.95 and also present as its periodic ghost
+        // image at x = -0.05. The interior bond 30 -> 20 (rest length 0.07)
+        // must use the near copy: no stretch, no breakage, no force.
+        let atoms = atom_with_points(&[
+            (10, [0.05, 0.5, 0.5], false),
+            (20, [0.95, 0.5, 0.5], false),
+            (30, [0.88, 0.5, 0.5], false),
+            (20, [-0.05, 0.5, 0.5], true),
+        ]);
+        let mut atoms = atoms;
+        let mut domain = Domain::new();
+        domain.size = [1.0, 1.0, 1.0];
+        domain.boundary_type =
+            [BoundaryType::Periodic, BoundaryType::Fixed, BoundaryType::Fixed];
+        let mut store = BondStore::new();
+        store.bonds = vec![
+            vec![BondEntry { partner_tag: 20, bond_type: BOND_INTACT, r0: 0.1 }],
+            vec![
+                BondEntry { partner_tag: 10, bond_type: BOND_INTACT, r0: 0.1 },
+                BondEntry { partner_tag: 30, bond_type: BOND_INTACT, r0: 0.07 },
+            ],
+            vec![BondEntry { partner_tag: 20, bond_type: BOND_INTACT, r0: 0.07 }],
+        ];
+        let mut pd = PeriAtom {
+            ref_pos: atoms.pos.to_vec(),
+            volume: vec![1.0; atoms.len()],
+            n0: vec![1.0, 2.0, 1.0, 0.0],
+            damage: vec![0.0; atoms.len()],
+        };
+        let mut tags = TagIndex::new();
+        tags.rebuild(&atoms);
+
+        accumulate_bond_forces(&mut atoms, &mut store, &mut pd, &unit_table(), &domain, &tags);
+
+        for (i, bonds) in store.bonds.iter().enumerate() {
+            for b in bonds {
+                assert_eq!(b.bond_type, BOND_INTACT, "row {i} bond to {} broke", b.partner_tag);
+            }
+        }
+        assert_eq!(pd.damage[..3], [0.0, 0.0, 0.0]);
+        for i in 0..3 {
+            for d in 0..3 {
+                assert!(atoms.force[i][d].abs() < 1e-12, "row {i} force {:?}", atoms.force[i]);
+            }
+        }
+    }
+
+    #[test]
+    fn periodic_wrap_bond_stretch_is_measured_across_the_seam() {
+        // 10 (x = 0.05) and 20 (x = 0.95) are 0.1 apart across the seam; with
+        // rest length 0.09 the bond is in tension (s = 1/9 > s0) and breaks,
+        // whichever copy of 20 the lookup returns.
+        let mut atoms = atom_with_points(&[
+            (10, [0.05, 0.5, 0.5], false),
+            (20, [0.95, 0.5, 0.5], false),
+        ]);
+        let mut domain = Domain::new();
+        domain.size = [1.0, 1.0, 1.0];
+        domain.boundary_type =
+            [BoundaryType::Periodic, BoundaryType::Fixed, BoundaryType::Fixed];
+        let mut store = BondStore::new();
+        store.bonds = vec![
+            vec![BondEntry { partner_tag: 20, bond_type: BOND_INTACT, r0: 0.0999 }],
+            vec![BondEntry { partner_tag: 10, bond_type: BOND_INTACT, r0: 0.0999 }],
+        ];
+        let mut pd = PeriAtom {
+            ref_pos: atoms.pos.to_vec(),
+            volume: vec![1.0; 2],
+            n0: vec![1.0, 1.0],
+            damage: vec![0.0; 2],
+        };
+        let mut tags = TagIndex::new();
+        tags.rebuild(&atoms);
+        accumulate_bond_forces(&mut atoms, &mut store, &mut pd, &unit_table(), &domain, &tags);
+        // s = 0.1/0.0999 - 1 ≈ 0.001 < s0: intact, and 10 is pulled toward -x (the seam).
+        assert_eq!(store.bonds[0][0].bond_type, BOND_INTACT);
+        assert!(atoms.force[0][0] < 0.0 && atoms.force[1][0] > 0.0, "{:?}", atoms.force);
+        assert!((atoms.force[0][0] + atoms.force[1][0]).abs() < 1e-12);
     }
 
     #[test]
